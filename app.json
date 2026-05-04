@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "HMS Kiosco 24hs",
+    "slug": "HMS-Kiosco24",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#09090b"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hms24.kiosco"
+    },
+    "android": {
+      "package": "com.hms24.kiosco",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#09090b"
+      },
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "CAMERA",
+        "android.permission.CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-barcode-scanner",
+        {
+          "cameraPermission": "Permitir que HMS Kiosco use la cámara para escanear productos."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9121fc13-d998-4c8f-a94e-92e70968fe07"
+      }
+    }
+  }
+}
