@@ -1,5 +1,3 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
 # dependencies
 node_modules/
 
@@ -30,12 +28,16 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# 🛡️ SEGURIDAD (IMPORTANTE)
+.env
+.env.local
+.env.*.local
+# Ignora cualquier archivo que contenga tus llaves de Supabase
+supabase/functions/.env
 
 # typescript
 *.tsbuildinfo
 
-# generated native folders
+# generated native folders (EAS Build las genera en la nube, no las necesitás acá)
 /ios
 /android

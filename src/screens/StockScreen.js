@@ -2,8 +2,10 @@ import { useState, useMemo, useEffect } from 'react';
 import { 
   View, Text, TextInput, TouchableOpacity, ScrollView, 
   StyleSheet, SafeAreaView, ActivityIndicator, 
-  KeyboardAvoidingView, Platform 
+  KeyboardAvoidingView, Platform, Modal
 } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera'; // Nueva API de Expo
+import { ScanBarcode, X } from 'lucide-react-native'; // Iconos
 import { getProducts, insertProduct, updateStock } from '../lib/supabase';
 
 export default function StockScreen({ user }) {
@@ -15,6 +17,10 @@ export default function StockScreen({ user }) {
   
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProd, setNewProd] = useState({ barcode: '', name: '', price: '', stock: '' });
+
+  // Estados para la cámara
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isScannerVisible, setIsScannerVisible] = useState(false);
 
   useEffect(() => {
     fetchInitialData();
@@ -30,6 +36,24 @@ export default function StockScreen({ user }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Función para abrir escáner y pedir permisos
+  const openScanner = async () => {
+    if (!permission?.granted) {
+      const { granted } = await requestPermission();
+      if (!granted) {
+        alert("Se requiere permiso de cámara para escanear.");
+        return;
+      }
+    }
+    setIsScannerVisible(true);
+  };
+
+  const handleBarCodeScanned = ({ data }) => {
+    setNewProd(prev => ({ ...prev, barcode: data }));
+    setIsScannerVisible(false);
+    alert(`Código detectado: ${data}`);
   };
 
   const filtered = useMemo(() => {
@@ -108,13 +132,19 @@ export default function StockScreen({ user }) {
           {showAddForm && (
             <View style={s.addCard}>
               <Text style={s.cardLabel}>CÓDIGO DE BARRAS</Text>
-              <TextInput
-                style={s.input}
-                placeholder="Escanee o escriba..."
-                placeholderTextColor="#71717a"
-                value={newProd.barcode}
-                onChangeText={t => setNewProd(prev => ({...prev, barcode: t}))}
-              />
+              <View style={s.inputWithBtn}>
+                <TextInput
+                  style={[s.input, { flex: 1, marginBottom: 0 }]}
+                  placeholder="Escanee o escriba..."
+                  placeholderTextColor="#71717a"
+                  value={newProd.barcode}
+                  onChangeText={t => setNewProd(prev => ({...prev, barcode: t}))}
+                />
+                <TouchableOpacity style={s.miniScanBtn} onPress={openScanner}>
+                  <ScanBarcode color="#fff" size={20} />
+                </TouchableOpacity>
+              </View>
+
               <Text style={s.cardLabel}>NOMBRE DEL PRODUCTO</Text>
               <TextInput
                 style={s.input}
@@ -205,6 +235,26 @@ export default function StockScreen({ user }) {
           )}
           <View style={{ height: 100 }} />
         </ScrollView>
+
+        {/* MODAL DEL ESCÁNER */}
+        <Modal visible={isScannerVisible} animationType="slide">
+          <View style={s.modalScanner}>
+            <CameraView
+              style={s.camera}
+              onBarcodeScanned={isScannerVisible ? handleBarCodeScanned : undefined}
+              barcodeScannerSettings={{
+                barcodeTypes: ["ean13", "ean8", "upc_a", "qr"], 
+              }}
+            />
+            <View style={s.cameraOverlay}>
+              <Text style={s.cameraText}>Apunte al código de barras</Text>
+              <TouchableOpacity style={s.closeCam} onPress={() => setIsScannerVisible(false)}>
+                <X color="#fff" size={30} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -221,6 +271,8 @@ const s = StyleSheet.create({
   scroll: { flex: 1 },
   searchContainer: { paddingHorizontal: 16, marginBottom: 10 },
   input: { backgroundColor: '#18181b', color: '#fff', borderRadius: 12, padding: 15, fontSize: 16, borderWidth: 1, borderColor: '#27272a', marginBottom: 10 },
+  inputWithBtn: { flexDirection: 'row', gap: 10, marginBottom: 10 },
+  miniScanBtn: { backgroundColor: '#38bdf8', borderRadius: 12, width: 50, justifyContent: 'center', alignItems: 'center' },
   cardLabel: { color: '#71717a', fontSize: 10, fontWeight: 'bold', marginBottom: 5, marginLeft: 5 },
   addCard: { backgroundColor: '#18181b', borderRadius: 20, padding: 20, marginHorizontal: 16, marginBottom: 20, borderWidth: 1, borderColor: '#38bdf840' },
   saveBtn: { backgroundColor: '#38bdf8', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 10 },
@@ -240,5 +292,11 @@ const s = StyleSheet.create({
   adjBtnText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
   adjCenter: { alignItems: 'center' },
   adjVal: { color: '#fff', fontSize: 40, fontWeight: '900' },
-  adjSub: { color: '#38bdf8', fontSize: 12, fontWeight: 'bold' }
+  adjSub: { color: '#38bdf8', fontSize: 12, fontWeight: 'bold' },
+  // Estilos cámara
+  modalScanner: { flex: 1, backgroundColor: '#000' },
+  camera: { flex: 1 },
+  cameraOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center' },
+  cameraText: { color: '#fff', backgroundColor: 'rgba(0,0,0,0.5)', padding: 10, borderRadius: 10, position: 'absolute', top: 50 },
+  closeCam: { position: 'absolute', bottom: 50, backgroundColor: '#ef4444', padding: 15, borderRadius: 50 }
 });

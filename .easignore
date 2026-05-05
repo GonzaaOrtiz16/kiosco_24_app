@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+.git/
+android/
+ios/
+dist/
+build/
+assets/videos/
+*.mp4
+*.zip
+*.rar
