@@ -1,63 +1,118 @@
-import React, { useState } from 'react';
-import { View, Text, Platform, StyleSheet, Button } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera'; // Para Android
-import BarcodeScannerComponent from "react-qr-barcode-scanner"; // Para Web/Vercel
+import React, { useState, useEffect } from 'react';
+import { View, Text, Platform, StyleSheet, Button, TouchableOpacity } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 
 export default function ScannerHibrido({ onScan }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
-  // --- LÓGICA PARA WEB (Vercel) ---
-  if (Platform.OS === 'web') {
+  // Solicitar permisos automáticamente al abrir
+  useEffect(() => {
+    if (!permission?.granted) {
+      requestPermission();
+    }
+  }, []);
+
+  // Estado de carga de permisos
+  if (!permission) {
     return (
-      <View style={styles.webContainer}>
-        <BarcodeScannerComponent
-          width="100%"
-          height={300}
-          onUpdate={(err, result) => {
-            if (result) {
-              onScan(result.text);
-              alert("Escaneado en Web: " + result.text);
-            }
-          }}
-        />
-        <Text style={styles.textWeb}>Modo Web: Apuntá al código</Text>
+      <View style={styles.container}>
+        <Text style={styles.textCenter}>Cargando cámara...</Text>
       </View>
     );
   }
 
-  // --- LÓGICA PARA APP (Android) ---
-  if (!permission) return <View />;
+  // Si no hay permisos concedidos
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={{ color: 'white', textAlign: 'center' }}>Sin permiso de cámara</Text>
-        <Button onPress={requestPermission} title="Dar permiso" />
+        <Text style={styles.textCenter}>No tenemos acceso a la cámara</Text>
+        <TouchableOpacity style={styles.btnPermiso} onPress={requestPermission}>
+          <Text style={styles.btnText}>DAR PERMISO</Text>
+        </TouchableOpacity>
       </View>
     );
   }
+
+  const handleBarCodeScanned = ({ data }) => {
+    if (scanned) return;
+    setScanned(true);
+    onScan(data);
+    // Reinicia el escáner después de 2.5 segundos para evitar lecturas duplicadas
+    setTimeout(() => setScanned(false), 2500);
+  };
 
   return (
     <View style={styles.container}>
       <CameraView
         style={StyleSheet.absoluteFillObject}
-        onBarcodeScanned={scanned ? undefined : ({ data }) => {
-          setScanned(true);
-          onScan(data);
-          setTimeout(() => setScanned(false), 2000); // Re-activa en 2 seg
+        barcodeScannerSettings={{
+          barcodeTypes: ["ean13", "ean8", "upc_a", "qr"], // Tipos de códigos de productos
         }}
+        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
       />
+      
+      {/* Overlay visual para centrar el código */}
       <View style={styles.overlay}>
-        <Text style={styles.textApp}>Escaneando en App...</Text>
+        <View style={styles.marker} />
+        <Text style={styles.textInfo}>
+          {Platform.OS === 'web' 
+            ? 'Cámara Web Activa - Apuntá al código' 
+            : 'Escaneando con el celular...'}
+        </Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, height: 300, backgroundColor: 'black' },
-  webContainer: { width: '100%', height: 300, backgroundColor: '#111' },
-  overlay: { position: 'absolute', bottom: 20, width: '100%', alignItems: 'center' },
-  textWeb: { color: 'white', textAlign: 'center', padding: 10 },
-  textApp: { color: 'white', backgroundColor: 'rgba(0,0,0,0.6)', padding: 5 }
+  container: { 
+    flex: 1, 
+    backgroundColor: 'black', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  textCenter: { 
+    color: 'white', 
+    textAlign: 'center', 
+    marginBottom: 20 
+  },
+  btnPermiso: { 
+    backgroundColor: '#38bdf8', 
+    paddingHorizontal: 20, 
+    paddingVertical: 12, 
+    borderRadius: 8 
+  },
+  btnText: { 
+    color: '#000', 
+    fontWeight: 'bold' 
+  },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  marker: {
+    width: 250,
+    height: 150,
+    borderWidth: 2,
+    borderColor: '#38bdf8',
+    borderRadius: 15,
+    backgroundColor: 'transparent',
+  },
+  textInfo: {
+    color: 'white',
+    marginTop: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 15,
+    paddingVertical: 6,
+    borderRadius: 10,
+    fontSize: 12,
+    fontWeight: 'bold',
+    overflow: 'hidden'
+  }
 });
