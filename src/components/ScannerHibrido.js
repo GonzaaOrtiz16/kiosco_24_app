@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Platform, StyleSheet, Button, TouchableOpacity } from 'react-native';
+import { View, Text, Platform, StyleSheet, TouchableOpacity } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 
 export default function ScannerHibrido({ onScan }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
-  // Solicitar permisos automáticamente al abrir
+  // Solicitar permisos al montar o si cambian
   useEffect(() => {
-    if (!permission?.granted) {
+    if (permission && !permission.granted && permission.canAskAgain) {
       requestPermission();
     }
-  }, []);
+  }, [permission]);
 
-  // Estado de carga de permisos
+  // Estado de carga inicial
   if (!permission) {
     return (
       <View style={styles.container}>
@@ -22,24 +22,29 @@ export default function ScannerHibrido({ onScan }) {
     );
   }
 
-  // Si no hay permisos concedidos
+  // Si no hay permisos o fueron denegados
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.textCenter}>No tenemos acceso a la cámara</Text>
+        <Text style={styles.textCenter}>Permiso de cámara necesario para escanear.</Text>
         <TouchableOpacity style={styles.btnPermiso} onPress={requestPermission}>
-          <Text style={styles.btnText}>DAR PERMISO</Text>
+          <Text style={styles.btnText}>HABILITAR CÁMARA</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
+  // Función que procesa la lectura
   const handleBarCodeScanned = ({ data }) => {
-    if (scanned) return;
+    if (scanned || !data) return;
     setScanned(true);
+    
+    // Ejecutamos la función que viene por props
     onScan(data);
-    // Reinicia el escáner después de 2.5 segundos para evitar lecturas duplicadas
-    setTimeout(() => setScanned(false), 2500);
+
+    // Esperamos 3 segundos antes de permitir otro escaneo 
+    // para que no cargue el mismo producto 10 veces seguidas
+    setTimeout(() => setScanned(false), 3000);
   };
 
   return (
@@ -47,19 +52,34 @@ export default function ScannerHibrido({ onScan }) {
       <CameraView
         style={StyleSheet.absoluteFillObject}
         barcodeScannerSettings={{
-          barcodeTypes: ["ean13", "ean8", "upc_a", "qr"], // Tipos de códigos de productos
+          // Agregamos más formatos para que la web tenga más chances de reconocerlos
+          barcodeTypes: [
+            "ean13", 
+            "ean8", 
+            "upc_a", 
+            "upc_e", 
+            "code128", 
+            "code39", 
+            "qr"
+          ],
         }}
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
       />
       
-      {/* Overlay visual para centrar el código */}
+      {/* Marco de referencia visual */}
       <View style={styles.overlay}>
         <View style={styles.marker} />
-        <Text style={styles.textInfo}>
-          {Platform.OS === 'web' 
-            ? 'Cámara Web Activa - Apuntá al código' 
-            : 'Escaneando con el celular...'}
-        </Text>
+        
+        <View style={styles.infoContainer}>
+          <Text style={styles.textInfo}>
+            {Platform.OS === 'web' 
+              ? 'Mantené el código firme frente a la webcam' 
+              : 'Escaneando código...'}
+          </Text>
+          {scanned && (
+            <Text style={styles.textScanned}>¡LEÍDO!</Text>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -70,18 +90,19 @@ const styles = StyleSheet.create({
     flex: 1, 
     backgroundColor: 'black', 
     justifyContent: 'center', 
-    alignItems: 'center' 
+    alignItems: 'center',
+    minHeight: 400 // Importante para que se vea bien en navegadores
   },
   textCenter: { 
     color: 'white', 
     textAlign: 'center', 
-    marginBottom: 20 
+    padding: 20 
   },
   btnPermiso: { 
     backgroundColor: '#38bdf8', 
-    paddingHorizontal: 20, 
-    paddingVertical: 12, 
-    borderRadius: 8 
+    paddingHorizontal: 25, 
+    paddingVertical: 15, 
+    borderRadius: 12 
   },
   btnText: { 
     color: '#000', 
@@ -97,22 +118,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   marker: {
-    width: 250,
-    height: 150,
-    borderWidth: 2,
+    width: 280,
+    height: 160,
+    borderWidth: 3,
     borderColor: '#38bdf8',
-    borderRadius: 15,
+    borderRadius: 20,
     backgroundColor: 'transparent',
+  },
+  infoContainer: {
+    marginTop: 30,
+    alignItems: 'center'
   },
   textInfo: {
     color: 'white',
-    marginTop: 20,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 15,
-    paddingVertical: 6,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     borderRadius: 10,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 'bold',
-    overflow: 'hidden'
+    textAlign: 'center'
+  },
+  textScanned: {
+    color: '#4ade80',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 10,
+    textShadowColor: 'black',
+    textShadowRadius: 5
   }
 });
