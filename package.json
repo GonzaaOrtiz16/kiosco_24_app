@@ -2,13 +2,12 @@
   "name": "hms-kiosco-24hs",
   "version": "1.0.0",
   "main": "index.js",
-  "scripts": {
+ "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:web": "npx expo export -p web",
-    "build": "npx expo export -p web"
+    "build": "npx expo export:web"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -20,8 +19,8 @@
     "expo-camera": "~17.0.10",
     "expo-status-bar": "~3.0.9",
     "lucide-react-native": "^1.14.0",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-safe-area-context": "~5.6.0",
