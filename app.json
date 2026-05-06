@@ -21,8 +21,7 @@
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
-        "CAMERA",
-        "android.permission.CAMERA"
+        "CAMERA"
       ]
     },
     "web": {
@@ -30,7 +29,7 @@
     },
     "plugins": [
       [
-        "expo-barcode-scanner",
+        "expo-camera",
         {
           "cameraPermission": "Permitir que HMS Kiosco use la cámara para escanear productos."
         }
