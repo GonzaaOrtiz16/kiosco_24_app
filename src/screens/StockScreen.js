@@ -4,8 +4,9 @@ import {
   StyleSheet, SafeAreaView, ActivityIndicator, 
   KeyboardAvoidingView, Platform, Modal
 } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera'; // Nueva API de Expo
-import { ScanBarcode, X } from 'lucide-react-native'; // Iconos
+// 1. IMPORTAMOS EL HÍBRIDO Y QUITAMOS EXPO-CAMERA
+import { ScanBarcode, X } from 'lucide-react-native'; 
+import ScannerHibrido from '../components/ScannerHibrido'; 
 import { getProducts, insertProduct, updateStock } from '../lib/supabase';
 
 export default function StockScreen({ user }) {
@@ -18,8 +19,7 @@ export default function StockScreen({ user }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProd, setNewProd] = useState({ barcode: '', name: '', price: '', stock: '' });
 
-  // Estados para la cámara
-  const [permission, requestPermission] = useCameraPermissions();
+  // Estado para el escáner
   const [isScannerVisible, setIsScannerVisible] = useState(false);
 
   useEffect(() => {
@@ -38,22 +38,16 @@ export default function StockScreen({ user }) {
     }
   };
 
-  // Función para abrir escáner y pedir permisos
-  const openScanner = async () => {
-    if (!permission?.granted) {
-      const { granted } = await requestPermission();
-      if (!granted) {
-        alert("Se requiere permiso de cámara para escanear.");
-        return;
-      }
-    }
+  // 2. FUNCIÓN SIMPLIFICADA (El componente hibrido ya maneja permisos internamente)
+  const openScanner = () => {
     setIsScannerVisible(true);
   };
 
-  const handleBarCodeScanned = ({ data }) => {
+  const handleBarCodeScanned = (data) => {
     setNewProd(prev => ({ ...prev, barcode: data }));
     setIsScannerVisible(false);
-    alert(`Código detectado: ${data}`);
+    // Un pequeño delay para que no se pise con el cierre del modal
+    setTimeout(() => alert(`Código detectado: ${data}`), 500);
   };
 
   const filtered = useMemo(() => {
@@ -114,18 +108,18 @@ export default function StockScreen({ user }) {
         style={{ flex: 1 }}
       >
         <View style={s.headerContainer}>
-           <Text style={s.headerTitle}>Panel de <Text style={s.blue}>Stock</Text></Text>
-           {user?.role === 'encargado' && (
-             <TouchableOpacity 
-              style={[s.addBtn, showAddForm && s.addBtnActive]} 
-              onPress={() => {
-                  setShowAddForm(!showAddForm);
-                  if(!showAddForm) setSelected(null);
-              }}
-             >
-               <Text style={s.addBtnText}>{showAddForm ? 'CANCELAR' : '+ NUEVO'}</Text>
-             </TouchableOpacity>
-           )}
+            <Text style={s.headerTitle}>Panel de <Text style={s.blue}>Stock</Text></Text>
+            {user?.role === 'encargado' && (
+              <TouchableOpacity 
+               style={[s.addBtn, showAddForm && s.addBtnActive]} 
+               onPress={() => {
+                   setShowAddForm(!showAddForm);
+                   if(!showAddForm) setSelected(null);
+               }}
+              >
+                <Text style={s.addBtnText}>{showAddForm ? 'CANCELAR' : '+ NUEVO'}</Text>
+              </TouchableOpacity>
+            )}
         </View>
 
         <ScrollView style={s.scroll} keyboardShouldPersistTaps="handled">
@@ -236,18 +230,12 @@ export default function StockScreen({ user }) {
           <View style={{ height: 100 }} />
         </ScrollView>
 
-        {/* MODAL DEL ESCÁNER */}
+        {/* 3. MODAL ACTUALIZADO CON EL ESCÁNER HÍBRIDO */}
         <Modal visible={isScannerVisible} animationType="slide">
           <View style={s.modalScanner}>
-            <CameraView
-              style={s.camera}
-              onBarcodeScanned={isScannerVisible ? handleBarCodeScanned : undefined}
-              barcodeScannerSettings={{
-                barcodeTypes: ["ean13", "ean8", "upc_a", "qr"], 
-              }}
-            />
+            <ScannerHibrido onScan={handleBarCodeScanned} />
+            
             <View style={s.cameraOverlay}>
-              <Text style={s.cameraText}>Apunte al código de barras</Text>
               <TouchableOpacity style={s.closeCam} onPress={() => setIsScannerVisible(false)}>
                 <X color="#fff" size={30} />
               </TouchableOpacity>
@@ -293,10 +281,7 @@ const s = StyleSheet.create({
   adjCenter: { alignItems: 'center' },
   adjVal: { color: '#fff', fontSize: 40, fontWeight: '900' },
   adjSub: { color: '#38bdf8', fontSize: 12, fontWeight: 'bold' },
-  // Estilos cámara
   modalScanner: { flex: 1, backgroundColor: '#000' },
-  camera: { flex: 1 },
   cameraOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center' },
-  cameraText: { color: '#fff', backgroundColor: 'rgba(0,0,0,0.5)', padding: 10, borderRadius: 10, position: 'absolute', top: 50 },
   closeCam: { position: 'absolute', bottom: 50, backgroundColor: '#ef4444', padding: 15, borderRadius: 50 }
 });

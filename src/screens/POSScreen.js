@@ -8,7 +8,7 @@ import { useIsFocused } from '@react-navigation/native';
 // Iconos modernos
 import { 
   ShoppingCart, Settings, LogOut, PackageSearch, 
-  CheckCircle2, Trash2, UserPlus 
+  CheckCircle2, Trash2, UserPlus, X 
 } from 'lucide-react-native';
 
 // Importación de Componentes Modulares
@@ -16,7 +16,7 @@ import ScannerInput from '../components/ScannerInput';
 import CartItem from '../components/CartItem';
 import AuthModal from '../components/AuthModal';
 import HistorySection from '../components/HistorySection';
-import BarcodeScanner from '../components/BarcodeScanner'; 
+import ScannerHibrido from '../components/ScannerHibrido'; // <--- NUEVO COMPONENTE HÍBRIDO
 
 // Libs y Pantallas
 import { getProducts, updateStock, insertMovements, getMovementsToday } from '../lib/supabase';
@@ -29,7 +29,7 @@ const fmt = (n) => new Intl.NumberFormat('es-AR', {
 }).format(n);
 
 export default function POSScreen({ user, onLogout }) {
-  // --- 1. TODOS LOS HOOKS VAN AQUÍ ARRIBA (NUNCA después de un return) ---
+  // --- 1. HOOKS ---
   const isFocused = useIsFocused();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -85,7 +85,7 @@ export default function POSScreen({ user, onLogout }) {
 
   const total = useMemo(() => cart.reduce((s, c) => s + c.price * c.qty, 0), [cart]);
 
-  // --- 2. FUNCIONES DE LÓGICA ---
+  // --- 2. LÓGICA ---
   const addToCart = (p) => {
     if (p.stock <= 0) { 
       Alert.alert('Sin stock', `${p.name || p.title} no tiene unidades`); 
@@ -158,29 +158,39 @@ export default function POSScreen({ user, onLogout }) {
     }
   };
 
-  // --- 3. RENDERIZADO CONDICIONAL (DESPUÉS DE LOS HOOKS) ---
+  // --- 3. RENDERIZADO CONDICIONAL ---
 
   if (view === 'admin') {
     return <AdminScreen user={user} onBack={() => { setView('pos'); loadInitialData(); }} />;
   }
 
+  // MODO ESCÁNER (HÍBRIDO)
   if (scanning) {
     return (
-      <BarcodeScanner 
-        onScan={(code) => {
-          const found = products.find(p => p.barcode === code);
-          if (found) {
-            addToCart(found);
-            setScanning(false);
-          } else {
-            Alert.alert('No encontrado', `El código ${code} no existe.`, [
-              { text: 'Reintentar' },
-              { text: 'Cerrar', onPress: () => setScanning(false) }
-            ]);
-          }
-        }} 
-        onClose={() => setScanning(false)} 
-      />
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <ScannerHibrido 
+          onScan={(code) => {
+            const found = products.find(p => p.barcode === code.trim());
+            if (found) {
+              addToCart(found);
+              setScanning(false);
+            } else {
+              Alert.alert('No encontrado', `El código ${code} no existe en la base de datos.`, [
+                { text: 'Reintentar' },
+                { text: 'Cerrar', onPress: () => setScanning(false) }
+              ]);
+            }
+          }} 
+        />
+        {/* Botón flotante para cerrar el escáner */}
+        <TouchableOpacity 
+          onPress={() => setScanning(false)} 
+          style={s.closeScannerBtn}
+        >
+          <X color="white" size={24} />
+          <Text style={{color: 'white', fontWeight: '900', marginLeft: 5}}>SALIR</Text>
+        </TouchableOpacity>
+      </View>
     );
   }
 
@@ -333,5 +343,15 @@ const s = StyleSheet.create({
   totalAmt: { color: '#fff', fontWeight: '900', fontSize: 38 },
   confirmBtn: { backgroundColor: '#22c55e', borderRadius: 20, padding: 18, alignItems: 'center', marginTop: 20 },
   btnContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  confirmBtnText: { color: '#fff', fontWeight: '900', fontSize: 16 }
+  confirmBtnText: { color: '#fff', fontWeight: '900', fontSize: 16 },
+  closeScannerBtn: { 
+    position: 'absolute', 
+    top: 50, 
+    right: 20, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(239, 68, 68, 0.9)', 
+    padding: 12, 
+    borderRadius: 15 
+  }
 });
