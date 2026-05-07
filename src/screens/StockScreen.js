@@ -69,7 +69,7 @@ export default function StockScreen({ user }) {
     try {
       setLoading(true);
       const { error } = await supabase
-        .from('productos')
+        .from('products')
         .update({
           name: datosEditados.name.trim(),
           price: parseFloat(datosEditados.price),
