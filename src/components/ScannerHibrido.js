@@ -4,8 +4,6 @@ import { View, Text, Platform, StyleSheet, TouchableOpacity } from 'react-native
 // ─────────────────────────────────────────────────────
 // NATIVO (Android APK / iOS): usa expo-camera
 // ─────────────────────────────────────────────────────
-// El import de expo-camera se hace de forma condicional para que
-// no rompa el bundle web, donde estos módulos no existen.
 let CameraView, useCameraPermissions;
 if (Platform.OS !== 'web') {
   const ExpoCamera = require('expo-camera');
@@ -45,87 +43,88 @@ function ScannerWeb({ onScan }) {
   const [camLabel, setCamLabel] = useState('Iniciando cámara...');
 
   useEffect(() => {
-    // Esperamos 150ms para garantizar que el <video> ya está montado en el DOM.
-    // Sin este delay, videoRef.current es null y ZXing falla silenciosamente.
-    const timer = setTimeout(async () => {
+    let codeReader = null;
+
+    const startScanner = async () => {
+      // 1. Delay para que el DOM monte el elemento <video>
+      await new Promise(r => setTimeout(r, 400));
+      
       if (!videoRef.current) {
         setError('No se pudo inicializar la cámara. Recargá la página.');
         return;
       }
 
       try {
-        // Configuración de hints: formatos a detectar y modo "try harder"
-        // que hace más intentos por frame (crítico para EAN-13 en móvil)
+        // 2. FORZAR PERMISO: Vital para que iPhone no bloquee la lista de cámaras
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        }
+
+        // 3. CONFIGURACIÓN ESTRICTA: Solo códigos de barras para no sobrecargar el CPU
         const hints = new Map();
         hints.set(DecodeHintType.POSSIBLE_FORMATS, [
           BarcodeFormat.EAN_13,
           BarcodeFormat.EAN_8,
-          BarcodeFormat.UPC_A,
-          BarcodeFormat.UPC_E,
-          BarcodeFormat.CODE_128,
-          BarcodeFormat.CODE_39,
-          BarcodeFormat.QR_CODE,
+          BarcodeFormat.CODE_128
         ]);
         hints.set(DecodeHintType.TRY_HARDER, true);
 
-        const codeReader = new BrowserMultiFormatReader(hints);
+        codeReader = new BrowserMultiFormatReader(hints);
         readerRef.current = codeReader;
 
-        // Enumerar dispositivos para elegir explícitamente la cámara trasera.
-        // Con null como deviceId el browser elige (casi siempre la frontal en móvil).
-        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-
+        // 4. LISTAR CÁMARAS: Se llama sobre la instancia, no estático (evita error "not a function")
+        const devices = await codeReader.listVideoInputDevices();
         let deviceId = undefined;
+
         if (devices && devices.length > 0) {
-          // Buscar por label: "back", "rear", "trasera", "environment"
-          const backCam = devices.find(d =>
-            /back|rear|trasera|environment|principal/i.test(d.label)
-          );
+          const backCam = devices.find(d => /back|rear|trasera|environment|principal/i.test(d.label));
           if (backCam) {
             deviceId = backCam.deviceId;
             setCamLabel('Cámara trasera activa');
           } else {
-            // Fallback: en móvil el último dispositivo suele ser la trasera
             deviceId = devices[devices.length - 1].deviceId;
             setCamLabel('Cámara activa');
           }
         }
 
+        // 5. INICIAR ESCANEO
         await codeReader.decodeFromVideoDevice(
           deviceId,
           videoRef.current,
           (result, err) => {
-            // err llega en cada frame sin código — es normal, no lo mostramos
             if (result && !scannedRef.current) {
-              scannedRef.current = true;
-              onScan(result.getText());
-              // Pausa de 2.5s para evitar doble lectura del mismo código
-              setTimeout(() => { scannedRef.current = false; }, 2500);
+              const text = result.getText();
+              
+              // 6. VALIDACIÓN ESTRICTA: Ignorar ruidos. Solo acepta entre 8 y 14 números.
+              if (/^\d{8,14}$/.test(text)) {
+                scannedRef.current = true;
+                setCamLabel('¡PRODUCTO LEÍDO!');
+                onScan(text);
+                
+                // Pausa para evitar lecturas dobles
+                setTimeout(() => { 
+                  scannedRef.current = false; 
+                  setCamLabel('Escaneando...');
+                }, 2500);
+              }
             }
           }
         );
       } catch (e) {
-        // Errores comunes:
-        // - NotAllowedError: usuario denegó permiso de cámara
-        // - NotFoundError: no hay cámara disponible
-        // - OverconstrainedError: el deviceId elegido no existe
-        const msg = e?.name === 'NotAllowedError'
-          ? 'Permiso de cámara denegado. Habilitalo en la configuración del navegador.'
-          : e?.name === 'NotFoundError'
-          ? 'No se encontró ninguna cámara en este dispositivo.'
-          : 'Error de cámara: ' + e.message;
-        setError(msg);
-      }
-    }, 150);
-
-    return () => {
-      clearTimeout(timer);
-      // Cleanup: liberar el stream de video al desmontar el componente
-      if (readerRef.current) {
-        try { readerRef.current.reset(); } catch (_) {}
+        console.error("Scanner Error:", e);
+        setError('Error de cámara o permiso denegado. Verificá los ajustes.');
       }
     };
-  }, []); // Solo corre al montar — no necesita deps
+
+    startScanner();
+
+    return () => {
+      // Cleanup seguro
+      if (codeReader) {
+        try { codeReader.reset(); } catch (_) {}
+      }
+    };
+  }, []);
 
   if (error) {
     return (
@@ -136,7 +135,6 @@ function ScannerWeb({ onScan }) {
           style={styles.btnPermiso}
           onPress={() => {
             setError(null);
-            // Forzar recarga del componente
             window.location.reload();
           }}
         >
@@ -148,11 +146,6 @@ function ScannerWeb({ onScan }) {
 
   return (
     <View style={styles.container}>
-      {/*
-        El elemento <video> es HTML nativo — React Native Web lo permite.
-        autoPlay + playsInline + muted son OBLIGATORIOS en iOS Safari
-        para que el video arranque sin interacción del usuario.
-      */}
       <video
         ref={videoRef}
         style={{
@@ -168,15 +161,12 @@ function ScannerWeb({ onScan }) {
         muted
       />
 
-      {/* Overlay con guía visual */}
       <View style={styles.overlay}>
-        {/* Marco guía */}
         <View style={styles.marker}>
           <View style={styles.cornerTL} />
           <View style={styles.cornerTR} />
           <View style={styles.cornerBL} />
           <View style={styles.cornerBR} />
-          {/* Línea de escaneo animada */}
           <View style={styles.scanLine} />
         </View>
 
@@ -198,14 +188,12 @@ function ScannerNativo({ onScan }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
-  // Pedir permisos al montar
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) {
       requestPermission();
     }
   }, [permission]);
 
-  // Cargando permisos
   if (!permission) {
     return (
       <View style={styles.container}>
@@ -214,7 +202,6 @@ function ScannerNativo({ onScan }) {
     );
   }
 
-  // Permiso denegado
   if (!permission.granted) {
     return (
       <View style={styles.container}>
@@ -231,19 +218,22 @@ function ScannerNativo({ onScan }) {
 
   const handleBarCodeScanned = ({ data }) => {
     if (scanned || !data) return;
-    setScanned(true);
-    onScan(data);
-    setTimeout(() => setScanned(false), 2500);
+    
+    // Aplicamos el mismo filtro estricto al nativo
+    if (/^\d{8,14}$/.test(data)) {
+      setScanned(true);
+      onScan(data);
+      setTimeout(() => setScanned(false), 2500);
+    }
   };
 
   return (
     <View style={styles.container}>
       <CameraView
         style={StyleSheet.absoluteFillObject}
-        // facing="back" fuerza la cámara trasera en el APK
         facing="back"
         barcodeScannerSettings={{
-          barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39', 'qr'],
+          barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39'],
         }}
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
       />
@@ -317,7 +307,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Overlay y marco
   overlay: {
     position: 'absolute',
     top: 0,
@@ -329,7 +318,7 @@ const styles = StyleSheet.create({
   },
   marker: {
     width: 280,
-    height: 180,
+    height: 140, // Reducido ligeramente para forzar al usuario a centrar mejor el código
     borderRadius: 4,
     backgroundColor: 'transparent',
     justifyContent: 'center',
@@ -337,7 +326,6 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
 
-  // Esquinas del marco (estilo moderno, sin borde completo)
   cornerTL: {
     position: 'absolute', top: 0, left: 0,
     width: CORNER_SIZE, height: CORNER_SIZE,
@@ -367,7 +355,6 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
 
-  // Línea de escaneo
   scanLine: {
     width: '85%',
     height: 2,
@@ -380,7 +367,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#4ade80',
   },
 
-  // Texto inferior
   infoBox: {
     marginTop: 32,
     alignItems: 'center',
