@@ -30,45 +30,49 @@ export default function ScannerHibrido({ onScan }) {
 }
 
 // ─────────────────────────────────────────────────────
-// ScannerWeb — OPTIMIZADO PARA PRECISIÓN (iPhone 15 / A50)
+// ScannerWeb — OPTIMIZADO PARA PRECISIÓN Y VELOCIDAD
 // ─────────────────────────────────────────────────────
 function ScannerWeb({ onScan }) {
   const videoRef = useRef(null);
   const readerRef = useRef(null);
   const scannedRef = useRef(false);
   const [error, setError] = useState(null);
-  const [camLabel, setCamLabel] = useState('Iniciando cámara...');
+  const [camLabel, setCamLabel] = useState('Iniciando...');
 
   useEffect(() => {
     let codeReader = null;
 
     const initScanner = async () => {
-      // Espera para asegurar que el DOM esté listo
-      await new Promise(resolve => setTimeout(resolve, 400));
+      // Delay para asegurar montaje del DOM
+      await new Promise(resolve => setTimeout(resolve, 450));
       if (!videoRef.current) return;
 
       try {
-        // Forzar permiso y pedir resolución ideal para mejor enfoque
+        // Para el A50, 640x480 es mucho más rápido de procesar que 720p
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
           await navigator.mediaDevices.getUserMedia({ 
             video: { 
               facingMode: "environment",
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
+              width: { ideal: 640 },
+              height: { ideal: 480 }
             } 
           });
         }
 
         const hints = new Map();
-        // Solo formatos de productos para evitar ruido
         hints.set(DecodeHintType.POSSIBLE_FORMATS, [
           BarcodeFormat.EAN_13, 
           BarcodeFormat.EAN_8, 
           BarcodeFormat.CODE_128
         ]);
+        
+        // Configuraciones de decodificación agresiva
         hints.set(DecodeHintType.TRY_HARDER, true);
+        hints.set(DecodeHintType.ASSUME_GS1, true);
 
         codeReader = new BrowserMultiFormatReader(hints);
+        // Intentos de lectura cada 200ms para no saturar hardware antiguo
+        codeReader.timeBetweenDecodingAttempts = 200; 
         readerRef.current = codeReader;
 
         const devices = await codeReader.listVideoInputDevices();
@@ -86,8 +90,7 @@ function ScannerWeb({ onScan }) {
             if (result && !scannedRef.current) {
               const text = result.getText();
 
-              // FILTRO DE SEGURIDAD: Solo números de 8 a 14 dígitos
-              // Evita que lea precios o números de lote sueltos
+              // FILTRO DE SEGURIDAD: Solo números largos (productos)
               if (text.length >= 8 && text.length <= 14 && /^\d+$/.test(text)) {
                 scannedRef.current = true;
                 onScan(text);
@@ -97,7 +100,7 @@ function ScannerWeb({ onScan }) {
             }
           }
         );
-        setCamLabel("Escáner de precisión activo");
+        setCamLabel("Escáner de precisión listo");
       } catch (e) {
         console.error("Error Scanner:", e);
         setError(e.name === 'NotAllowedError' ? 'Habilitá la cámara en los ajustes del navegador.' : e.message);
@@ -131,13 +134,13 @@ function ScannerWeb({ onScan }) {
         autoPlay playsInline muted
       />
       <View style={styles.overlay}>
-        <View style={[styles.marker, { height: 120 }]}> 
+        <View style={[styles.marker, { height: 140 }]}> 
           <View style={styles.cornerTL} /><View style={styles.cornerTR} />
           <View style={styles.cornerBL} /><View style={styles.cornerBR} />
           <View style={styles.scanLine} />
         </View>
         <View style={styles.infoBox}>
-          <Text style={styles.textInfo}>Apuntá SOLO al código de barras</Text>
+          <Text style={styles.textInfo}>Apuntá al código de barras</Text>
           <Text style={styles.textCamLabel}>{camLabel}</Text>
         </View>
       </View>
@@ -146,7 +149,7 @@ function ScannerWeb({ onScan }) {
 }
 
 // ─────────────────────────────────────────────────────
-// ScannerNativo (Estable para APK)
+// ScannerNativo (Optimizado para APK)
 // ─────────────────────────────────────────────────────
 function ScannerNativo({ onScan }) {
   const [permission, requestPermission] = useCameraPermissions();
@@ -171,7 +174,6 @@ function ScannerNativo({ onScan }) {
 
   const handleBarCodeScanned = ({ data }) => {
     if (scanned || !data) return;
-    // Filtro básico también en nativo
     if (data.length >= 8 && /^\d+$/.test(data)) {
       setScanned(true);
       onScan(data);
@@ -190,7 +192,7 @@ function ScannerNativo({ onScan }) {
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
       />
       <View style={styles.overlay}>
-        <View style={[styles.marker, { height: 120 }]}>
+        <View style={[styles.marker, { height: 140 }]}>
           <View style={styles.cornerTL} /><View style={styles.cornerTR} />
           <View style={styles.cornerBL} /><View style={styles.cornerBR} />
           <View style={scanned ? styles.scanLineSuccess : styles.scanLine} />
@@ -200,9 +202,6 @@ function ScannerNativo({ onScan }) {
   );
 }
 
-// ─────────────────────────────────────────────────────
-// Estilos
-// ─────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   videoWeb: { position: 'absolute', width: '100%', height: '100%', objectFit: 'cover' },
@@ -215,10 +214,10 @@ const styles = StyleSheet.create({
   cornerTR: { position: 'absolute', top: 0, right: 0, width: 20, height: 20, borderTopWidth: 3, borderRightWidth: 3, borderColor: '#38bdf8' },
   cornerBL: { position: 'absolute', bottom: 0, left: 0, width: 20, height: 20, borderBottomWidth: 3, borderLeftWidth: 3, borderColor: '#38bdf8' },
   cornerBR: { position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderBottomWidth: 3, borderRightWidth: 3, borderColor: '#38bdf8' },
-  scanLine: { width: '100%', height: 2, backgroundColor: '#38bdf8', opacity: 0.5 },
-  scanLineSuccess: { width: '100%', height: 2, backgroundColor: '#4ade80' },
-  infoBox: { marginTop: 20, alignItems: 'center' },
-  textInfo: { color: 'white', fontSize: 13, backgroundColor: 'rgba(0,0,0,0.6)', padding: 5, borderRadius: 5 },
-  textCamLabel: { color: '#38bdf8', fontSize: 10, marginTop: 5, fontWeight: 'bold' }
+  scanLine: { width: '100%', height: 2, backgroundColor: '#38bdf8', opacity: 0.6, position: 'absolute', top: '50%' },
+  scanLineSuccess: { width: '100%', height: 2, backgroundColor: '#4ade80', position: 'absolute', top: '50%' },
+  infoBox: { marginTop: 35, alignItems: 'center' },
+  textInfo: { color: 'white', fontSize: 13, backgroundColor: 'rgba(0,0,0,0.6)', padding: 6, borderRadius: 6, fontWeight: '600' },
+  textCamLabel: { color: '#38bdf8', fontSize: 10, marginTop: 5, fontWeight: '800', textTransform: 'uppercase' }
 });
 
