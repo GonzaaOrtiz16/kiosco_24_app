@@ -60,29 +60,43 @@ function ScannerWeb({ onScan }) {
         let deviceId = undefined;
 
         if (devices && devices.length > 0) {
-          // Buscamos la cámara principal (trasera)
-          const backCam = devices.find(d => /back|rear|trasera|environment|principal/i.test(d.label));
+          // Buscamos la cámara trasera con un filtro más amplio
+          const backCam = devices.find(d => 
+            /back|rear|trasera|environment|principal|0/i.test(d.label)
+          );
+          
+          // En iPhone 15, a veces la última cámara de la lista es la de enfoque cercano (macro)
+          // Si backCam existe usamos esa, sino la última.
           deviceId = backCam ? backCam.deviceId : devices[devices.length - 1].deviceId;
           setCamLabel(backCam ? 'Cámara trasera activa' : 'Cámara activa');
         }
 
-        // decodeFromVideoDevice es el método más robusto para Chrome/Safari
         await codeReader.decodeFromVideoDevice(deviceId, videoRef.current, (result) => {
           if (result && !scannedRef.current) {
             scannedRef.current = true;
+            
+            // Sonido de sistema para feedback (opcional)
             onScan(result.getText());
-            // Feedback visual rápido
+            
+            // Pausa para evitar lecturas duplicadas
             setTimeout(() => { scannedRef.current = false; }, 3000);
           }
         });
       } catch (e) {
         setError('Error de cámara: ' + e.message);
       }
-    }, 300); // Delay de seguridad para el DOM
+    }, 400); // Aumentamos un poco el delay para asegurar que el DOM esté listo
 
     return () => {
       clearTimeout(timer);
-      if (readerRef.current) readerRef.current.reset();
+      if (readerRef.current) {
+        try {
+          readerRef.current.reset();
+          readerRef.current.stopContinuousDecode();
+        } catch (e) {
+          console.log("Limpieza de cámara");
+        }
+      }
     };
   }, []);
 
@@ -100,21 +114,30 @@ function ScannerWeb({ onScan }) {
   return (
     <View style={styles.container}>
       <video
+        key={camLabel} // FUERZA RE-RENDER AL DETECTAR CÁMARA
         ref={videoRef}
-        style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute' }}
+        style={{ 
+          width: '100%', 
+          height: '100%', 
+          objectFit: 'cover', 
+          position: 'absolute' 
+        }}
         autoPlay
         playsInline
         muted
         webkit-playsinline="true"
       />
+      
       <View style={styles.overlay}>
         <View style={styles.marker}>
           <View style={styles.cornerTL} /><View style={styles.cornerTR} />
           <View style={styles.cornerBL} /><View style={styles.cornerBR} />
           <View style={styles.scanLine} />
         </View>
+        
         <View style={styles.infoBox}>
-          <Text style={styles.textInfo}>Centrá el código de barras</Text>
+          {/* CAMBIÉ EL TEXTO PARA QUE CONFIRMES SI VERCEL ACTUALIZÓ */}
+          <Text style={styles.textInfo}>MODO SCANNER V2.1</Text>
           <Text style={styles.textCamLabel}>{camLabel}</Text>
         </View>
       </View>
