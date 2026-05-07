@@ -220,7 +220,7 @@ export default function CierreScreen({ user }) {
 
         {/* TICKET DE CIERRE */}
         <View style={s.ticket}>
-          <Text style={s.ticketTitle}>RAFAGHELLI MOTOS — {isEncargado ? `CIERRE ${rangeLabel.toUpperCase()}` : 'RESUMEN HOY'}</Text>
+          <Text style={s.ticketTitle}>HMS KIOSCO 24HS — {isEncargado ? `CIERRE ${rangeLabel.toUpperCase()}` : 'RESUMEN HOY'}</Text>
           <Text style={s.ticketSub}>
             Usuario: {user?.full_name} · {new Date().toLocaleDateString('es-AR')}
           </Text>
