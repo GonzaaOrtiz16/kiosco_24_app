@@ -25,7 +25,21 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "config": {
+        "pwa": {
+          "manifest": {
+            "name": "HMS Kiosco 24hs",
+            "short_name": "HMS Kiosco",
+            "description": "Sistema de gestión para Kiosco 24hs",
+            "background_color": "#09090b",
+            "theme_color": "#38bdf8",
+            "display": "standalone",
+            "start_url": "/"
+          }
+        }
+      }
     },
     "plugins": [
       [
