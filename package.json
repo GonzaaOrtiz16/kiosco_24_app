@@ -2,12 +2,15 @@
   "name": "hms-kiosco-24hs",
   "version": "1.0.0",
   "main": "index.js",
- "scripts": {
+  "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build": "npx expo export:web"
+    "build": "npx expo export:web",
+    "tauri": "tauri",
+    "build:tauri": "tauri build",
+    "dev:tauri": "tauri dev"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -27,6 +30,9 @@
     "react-native-screens": "~4.16.0",
     "react-native-svg": "15.12.1",
     "react-native-web": "^0.21.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
   },
   "private": true
 }
