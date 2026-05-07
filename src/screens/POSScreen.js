@@ -16,7 +16,7 @@ import ScannerInput from '../components/ScannerInput';
 import CartItem from '../components/CartItem';
 import AuthModal from '../components/AuthModal';
 import HistorySection from '../components/HistorySection';
-import ScannerHibrido from '../components/ScannerHibrido'; // <--- NUEVO COMPONENTE HÍBRIDO
+import ScannerHibrido from '../components/ScannerHibrido';
 
 // Libs y Pantallas
 import { getProducts, updateStock, insertMovements, getMovementsToday } from '../lib/supabase';
@@ -29,7 +29,6 @@ const fmt = (n) => new Intl.NumberFormat('es-AR', {
 }).format(n);
 
 export default function POSScreen({ user, onLogout }) {
-  // --- 1. HOOKS ---
   const isFocused = useIsFocused();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -85,7 +84,6 @@ export default function POSScreen({ user, onLogout }) {
 
   const total = useMemo(() => cart.reduce((s, c) => s + c.price * c.qty, 0), [cart]);
 
-  // --- 2. LÓGICA ---
   const addToCart = (p) => {
     if (p.stock <= 0) { 
       Alert.alert('Sin stock', `${p.name || p.title} no tiene unidades`); 
@@ -158,13 +156,10 @@ export default function POSScreen({ user, onLogout }) {
     }
   };
 
-  // --- 3. RENDERIZADO CONDICIONAL ---
-
   if (view === 'admin') {
     return <AdminScreen user={user} onBack={() => { setView('pos'); loadInitialData(); }} />;
   }
 
-  // MODO ESCÁNER (HÍBRIDO)
   if (scanning) {
     return (
       <View style={{ flex: 1, backgroundColor: '#000' }}>
@@ -175,14 +170,13 @@ export default function POSScreen({ user, onLogout }) {
               addToCart(found);
               setScanning(false);
             } else {
-              Alert.alert('No encontrado', `El código ${code} no existe en la base de datos.`, [
+              Alert.alert('No encontrado', `El código ${code} no existe.`, [
                 { text: 'Reintentar' },
                 { text: 'Cerrar', onPress: () => setScanning(false) }
               ]);
             }
           }} 
         />
-        {/* Botón flotante para cerrar el escáner */}
         <TouchableOpacity 
           onPress={() => setScanning(false)} 
           style={s.closeScannerBtn}
@@ -198,14 +192,14 @@ export default function POSScreen({ user, onLogout }) {
     <SafeAreaView style={s.safe}>
       <StatusBar barStyle="light-content" />
       
-      {/* HEADER */}
       <View style={s.topBar}>
         <TouchableOpacity onPress={onLogout} style={s.iconBtn}>
           <LogOut color="#ef4444" size={20} />
         </TouchableOpacity>
         
         <View style={s.titleContainer}>
-            <Text style={s.headerTitle}>KIOSCO <Text style={s.blue}>24HS</Text></Text>
+            {/* CAMBIO DE VERSIÓN PARA VERIFICAR ACTUALIZACIÓN */}
+            <Text style={s.headerTitle}>KIOSCO <Text style={s.blue}>24HS V2.1</Text></Text>
         </View>
 
         <TouchableOpacity onPress={() => setView('admin')} style={s.iconBtn}>
@@ -231,7 +225,6 @@ export default function POSScreen({ user, onLogout }) {
           isFocusedMode={isFocused && !pinVisible && !scanning}
         />
 
-        {/* RESULTADOS DE BÚSQUEDA */}
         {results.map(p => (
           <TouchableOpacity key={p.id} style={s.result} onPress={() => addToCart(p)}>
             <PackageSearch color="#3f3f46" size={20} style={{marginRight: 10}} />
@@ -243,19 +236,11 @@ export default function POSScreen({ user, onLogout }) {
           </TouchableOpacity>
         ))}
 
-        {/* CARRITO VISUAL */}
         {cart.length === 0 ? (
           <View style={s.emptyCart}>
             <ShoppingCart color="#18181b" size={80} strokeWidth={1.5} />
             <Text style={s.emptyText}>CARRITO VACÍO</Text>
-            <Text style={s.emptySubText}>Escanea o busca productos para vender</Text>
-            
-            {user?.role === 'encargado' && (
-              <TouchableOpacity style={s.quickAdmin} onPress={() => setView('admin')}>
-                <UserPlus color="#38bdf8" size={16} />
-                <Text style={s.quickAdminText}>Gestionar Usuarios y Stock</Text>
-              </TouchableOpacity>
-            )}
+            <Text style={s.emptySubText}>Escanea productos</Text>
           </View>
         ) : (
           <View style={s.card}>
@@ -299,7 +284,7 @@ export default function POSScreen({ user, onLogout }) {
           onVoid={(sg, items) => {
             setTempVoidData({ sg, items });
             if (user?.role === 'encargado') {
-                Alert.alert("Anular", "¿Confirmas la anulación?", [{text:"No"}, {text:"Sí, anular", onPress:() => doVoid(sg, items)}]);
+                Alert.alert("Anular", "¿Confirmas?", [{text:"No"}, {text:"Sí", onPress:() => doVoid(sg, items)}]);
             } else setPinVisible(true);
           }} 
         />
@@ -333,9 +318,7 @@ const s = StyleSheet.create({
   emptyCart: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80 },
   emptyText: { color: '#27272a', fontSize: 20, fontWeight: '900', marginTop: 15 },
   emptySubText: { color: '#3f3f46', fontSize: 13, marginTop: 5 },
-  quickAdmin: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 30, backgroundColor: '#18181b', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: '#27272a' },
-  quickAdminText: { color: '#38bdf8', fontWeight: '700', fontSize: 12 },
-  card: { backgroundColor: '#18181b', borderRadius: 28, padding: 20, marginTop: 10, borderWidth: 1, borderColor: '#27272a', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 5 },
+  card: { backgroundColor: '#18181b', borderRadius: 28, padding: 20, marginTop: 10, borderWidth: 1, borderColor: '#27272a' },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 15 },
   cardTitle: { color: '#71717a', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   totalRow: { borderTopWidth: 1, borderTopColor: '#27272a', marginTop: 15, paddingTop: 15, alignItems: 'center' },
@@ -350,8 +333,9 @@ const s = StyleSheet.create({
     right: 20, 
     flexDirection: 'row', 
     alignItems: 'center', 
-    backgroundColor: 'rgba(239, 68, 68, 0.9)', 
+    backgroundColor: '#38bdf8', // CAMBIO DE COLOR A AZUL PARA DISTINGUIR
     padding: 12, 
-    borderRadius: 15 
+    borderRadius: 15,
+    zIndex: 99
   }
 });
