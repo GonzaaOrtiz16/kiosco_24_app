@@ -8,19 +8,19 @@ import {
   ScanBarcode, X, Package, AlertTriangle, CheckCircle, Edit2, Save, Search 
 } from 'lucide-react-native'; 
 import ScannerHibrido from '../components/ScannerHibrido'; 
-import { getProducts, insertProduct, updateStock, supabase } from '../lib/supabase';
+import { getProducts, insertProduct, supabase } from '../lib/supabase';
 
 export default function StockScreen({ user }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   
-  // Estados para Edición/Ajuste
+  // Estados para Edición
   const [editandoId, setEditandoId] = useState(null);
   const [datosEditados, setDatosEditados] = useState({});
   
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newProd, setNewProd] = useState({ barcode: '', name: '', price: '', stock: '' });
+  const [newProd, setNewProd] = useState({ barcode: '', name: '', price: '', stock: '', category: 'Varios' });
   const [isScannerVisible, setIsScannerVisible] = useState(false);
 
   useEffect(() => {
@@ -64,16 +64,14 @@ export default function StockScreen({ user }) {
     setShowAddForm(false);
   };
 
-  // Función para guardar cambios (Nombre, Precio y Stock)
+  // Función para guardar cambios (Alineado a tu tabla: name, price, stock)
   const guardarCambios = async (id) => {
     try {
       setLoading(true);
       const { error } = await supabase
         .from('productos')
         .update({
-          nombre: datosEditados.name || datosEditados.nombre, // Soporte para ambos nombres de columna
-          name: datosEditados.name,
-          precio: parseFloat(datosEditados.price || datosEditados.precio),
+          name: datosEditados.name.trim(),
           price: parseFloat(datosEditados.price),
           stock: parseInt(datosEditados.stock)
         })
@@ -110,11 +108,11 @@ export default function StockScreen({ user }) {
         stock: parseInt(newProd.stock) || 0,
         category: 'Varios'
       });
-      setNewProd({ barcode: '', name: '', price: '', stock: '' });
+      setNewProd({ barcode: '', name: '', price: '', stock: '', category: 'Varios' });
       setShowAddForm(false);
       await fetchInitialData();
     } catch (e) {
-      alert('Error: ' + e.message);
+      Alert.alert('Error', e.message);
     } finally {
       setLoading(false);
     }
@@ -127,20 +125,18 @@ export default function StockScreen({ user }) {
         {/* HEADER */}
         <View style={s.headerContainer}>
           <Text style={s.headerTitle}>HMS <Text style={s.blue}>STOCK</Text></Text>
-          {user?.role === 'encargado' && (
-            <TouchableOpacity 
-              style={[s.addBtn, showAddForm && s.addBtnActive]} 
-              onPress={() => {
-                setShowAddForm(!showAddForm);
-                if(!showAddForm) setEditandoId(null);
-              }}
-            >
-              <Text style={s.addBtnText}>{showAddForm ? 'CANCELAR' : '+ NUEVO'}</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity 
+            style={[s.addBtn, showAddForm && s.addBtnActive]} 
+            onPress={() => {
+              setShowAddForm(!showAddForm);
+              if(!showAddForm) setEditandoId(null);
+            }}
+          >
+            <Text style={s.addBtnText}>{showAddForm ? 'CANCELAR' : '+ NUEVO'}</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* MÉTRICAS SUPERIORES */}
+        {/* MÉTRICAS */}
         <View style={s.metricsContainer}>
           <View style={s.metricBox}>
             <Package color="#38bdf8" size={20} />
@@ -175,7 +171,7 @@ export default function StockScreen({ user }) {
             </View>
           </View>
 
-          {/* FORMULARIO NUEVO PRODUCTO */}
+          {/* FORMULARIO NUEVO */}
           {showAddForm && (
             <View style={s.addCard}>
               <Text style={s.cardLabel}>CÓDIGO DE BARRAS</Text>
@@ -195,7 +191,7 @@ export default function StockScreen({ user }) {
               <Text style={s.cardLabel}>NOMBRE</Text>
               <TextInput
                 style={s.input}
-                placeholder="Ej: Coca Cola 500ml"
+                placeholder="Ej: KELYX"
                 placeholderTextColor="#71717a"
                 value={newProd.name}
                 onChangeText={t => setNewProd(prev => ({...prev, name: t}))}
@@ -230,7 +226,7 @@ export default function StockScreen({ user }) {
             </View>
           )}
 
-          {/* LISTADO DE TARJETAS */}
+          {/* LISTADO */}
           <View style={{ paddingHorizontal: 16 }}>
             {filtered.map(p => {
               const isEditing = editandoId === p.id;
@@ -238,10 +234,11 @@ export default function StockScreen({ user }) {
                 <View key={p.id} style={[s.productCard, isEditing && s.productCardEditing]}>
                   {isEditing ? (
                     <View>
+                      <Text style={s.cardLabel}>NOMBRE</Text>
                       <TextInput 
                         style={s.editInput} 
-                        value={datosEditados.name || datosEditados.nombre} 
-                        onChangeText={(t) => setDatosEditados({...datosEditados, name: t, nombre: t})}
+                        value={datosEditados.name} 
+                        onChangeText={(t) => setDatosEditados({...datosEditados, name: t})}
                       />
                       <View style={{flexDirection: 'row', gap: 10, marginTop: 10}}>
                         <View style={{flex: 1}}>
@@ -249,8 +246,8 @@ export default function StockScreen({ user }) {
                           <TextInput 
                             style={s.editInput} 
                             keyboardType="numeric"
-                            value={String(datosEditados.price || datosEditados.precio)} 
-                            onChangeText={(t) => setDatosEditados({...datosEditados, price: t, precio: t})}
+                            value={String(datosEditados.price)} 
+                            onChangeText={(t) => setDatosEditados({...datosEditados, price: t})}
                           />
                         </View>
                         <View style={{flex: 1}}>
@@ -276,9 +273,9 @@ export default function StockScreen({ user }) {
                   ) : (
                     <View style={s.cardRow}>
                       <View style={{ flex: 1 }}>
-                        <Text style={s.nameText}>{p.name || p.nombre}</Text>
+                        <Text style={s.nameText}>{p.name}</Text>
                         <Text style={s.barcodeText}>{p.barcode}</Text>
-                        <Text style={s.priceText}>${p.price || p.precio}</Text>
+                        <Text style={s.priceText}>${p.price}</Text>
                       </View>
                       <View style={{ alignItems: 'flex-end' }}>
                         <Text style={[s.stockText, p.stock <= 5 ? s.red : s.green]}>
@@ -298,7 +295,7 @@ export default function StockScreen({ user }) {
           <View style={{ height: 100 }} />
         </ScrollView>
 
-        {/* MODAL ESCÁNER */}
+        {/* SCANNER MODAL */}
         <Modal visible={isScannerVisible} animationType="slide">
           <View style={s.modalScanner}>
             <ScannerHibrido onScan={handleBarCodeScanned} />
@@ -318,19 +315,13 @@ const s = StyleSheet.create({
   headerContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
   headerTitle: { color: '#fff', fontSize: 22, fontWeight: '900' },
   blue: { color: '#38bdf8' },
-  
-  // Métricas
   metricsContainer: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 20 },
   metricBox: { flex: 1, backgroundColor: '#18181b', padding: 15, borderRadius: 16, alignItems: 'center', marginHorizontal: 4, borderWidth: 1, borderColor: '#27272a' },
   metricVal: { color: '#fff', fontSize: 18, fontWeight: '900', marginTop: 5 },
   metricLabel: { color: '#71717a', fontSize: 10, fontWeight: 'bold' },
-
-  // Buscador
   searchContainer: { paddingHorizontal: 16, marginBottom: 15 },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#18181b', borderRadius: 12, paddingHorizontal: 15, borderWidth: 1, borderColor: '#27272a' },
   searchInput: { flex: 1, color: '#fff', paddingVertical: 12, fontSize: 14 },
-
-  // Tarjetas de Producto
   productCard: { backgroundColor: '#18181b', borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#27272a' },
   productCardEditing: { borderColor: '#38bdf8', borderWidth: 2 },
   cardRow: { flexDirection: 'row', alignItems: 'center' },
@@ -341,15 +332,11 @@ const s = StyleSheet.create({
   green: { color: '#22c55e' },
   red: { color: '#ef4444' },
   editIconButton: { marginTop: 10, padding: 5 },
-
-  // Inputs Edición
   editInput: { backgroundColor: '#27272a', color: '#fff', borderRadius: 8, padding: 10, fontSize: 15, borderWidth: 1, borderColor: '#3f3f46' },
   editActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 15, gap: 10 },
   btnDone: { backgroundColor: '#38bdf8', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
   btnDoneText: { color: '#000', fontWeight: 'bold', marginLeft: 5 },
   btnCancel: { backgroundColor: '#3f3f46', padding: 10, borderRadius: 8 },
-
-  // Formulario Nuevo
   addBtn: { backgroundColor: '#38bdf8', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8 },
   addBtnActive: { backgroundColor: '#ef4444' },
   addBtnText: { color: '#000', fontWeight: '900', fontSize: 12 },
@@ -360,8 +347,6 @@ const s = StyleSheet.create({
   miniScanBtn: { backgroundColor: '#38bdf8', borderRadius: 10, width: 50, justifyContent: 'center', alignItems: 'center' },
   saveBtn: { backgroundColor: '#38bdf8', borderRadius: 10, padding: 15, alignItems: 'center' },
   saveBtnText: { color: '#000', fontWeight: '900' },
-
-  // Otros
   scroll: { flex: 1 },
   modalScanner: { flex: 1, backgroundColor: '#000' },
   closeCam: { position: 'absolute', bottom: 50, alignSelf: 'center', backgroundColor: '#ef4444', padding: 15, borderRadius: 50 }
