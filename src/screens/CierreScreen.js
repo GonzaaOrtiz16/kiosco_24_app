@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView, Alert, ActivityIndicator, Platform } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker'; 
 import { getMovementsByRange, supabase } from '../lib/supabase';
 import HistoryNavigator from '../components/HistoryNavigator';
 
@@ -8,18 +9,20 @@ const timeStr = (iso) => new Date(iso).toLocaleTimeString('es-AR', { hour: '2-di
 
 export default function CierreScreen({ user }) {
   const [filter, setFilter] = useState('all');
+  const [timeFilter, setTimeFilter] = useState('day'); // Controla el naranja del Navigator
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [rangeLabel, setRangeLabel] = useState('Hoy');
+  
+  // Estados para el Calendario
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
-  // Determinar si es encargado
   const isEncargado = user?.role === 'encargado';
 
-  // Carga de datos flexible por rango
   const fetchCierre = async (start, end) => {
     setLoading(true);
     try {
-      // Si no vienen fechas, por defecto es hoy
       const dateS = start || new Date(new Date().setHours(0, 0, 0, 0));
       const dateE = end || new Date(new Date().setHours(23, 59, 59, 999));
       
@@ -37,11 +40,27 @@ export default function CierreScreen({ user }) {
     fetchCierre();
   }, []);
 
-  // Función que dispara el HistoryNavigator
   const handleRangeChange = (start, end, type) => {
     const labels = { day: 'Hoy', week: 'Última Semana', month: 'Último Mes', year: 'Último Año' };
+    setTimeFilter(type); // Sincroniza el color naranja
     setRangeLabel(labels[type]);
     fetchCierre(start, end);
+  };
+
+  const onCalendarChange = (event, date) => {
+    setShowCalendar(false);
+    if (date) {
+      setSelectedDate(date);
+      setTimeFilter('custom'); // Desmarca los botones HOY/SEMANA/etc
+      setRangeLabel(date.toLocaleDateString('es-AR'));
+      
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+      
+      fetchCierre(start, end);
+    }
   };
 
   const handleAnular = async (saleGroup) => {
@@ -73,7 +92,7 @@ export default function CierreScreen({ user }) {
             if (error) {
               Alert.alert("Error", "No se pudo anular.");
             } else {
-              fetchCierre(); // Recarga con el rango actual (si es hoy)
+              fetchCierre(); 
             }
           }
         }
@@ -82,7 +101,6 @@ export default function CierreScreen({ user }) {
   };
 
   // ── PROCESAMIENTO DE DATOS ─────────────────────
-  
   const todasVentas = movements.filter(m => m.movement_type === 'venta');
   const todasAnulaciones = movements.filter(m => m.movement_type === 'anulacion');
   const checkVoided = (sg) => todasAnulaciones.some(m => m.sale_group === sg);
@@ -131,9 +149,31 @@ export default function CierreScreen({ user }) {
     <SafeAreaView style={s.safe}>
       <ScrollView style={s.scroll}>
         
-        {/* NAVEGADOR DE HISTORIAL - Solo para encargados */}
+        {/* NAVEGADOR DE HISTORIAL Y CALENDARIO */}
         {isEncargado && (
-          <HistoryNavigator onRangeChange={handleRangeChange} />
+          <View style={{ marginBottom: 12 }}>
+            <HistoryNavigator 
+                onRangeChange={handleRangeChange} 
+                activeTab={timeFilter} 
+            />
+            
+            <TouchableOpacity 
+              style={s.calendarBtn} 
+              onPress={() => setShowCalendar(true)}
+            >
+              <Text style={s.calendarBtnText}>📅 BUSCAR POR FECHA ESPECÍFICA</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {showCalendar && (
+          <DateTimePicker
+            value={selectedDate}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onCalendarChange}
+            maximumDate={new Date()}
+          />
         )}
 
         {/* INDICADORES (KPIs) */}
@@ -226,7 +266,11 @@ export default function CierreScreen({ user }) {
           </Text>
           <Text style={s.ticketTotal}>{fmt(totalRevenue)}</Text>
           <Text style={s.ticketSub}>{activeGroups.length} ventas en el período</Text>
-          <TouchableOpacity style={s.refreshBtn} onPress={() => fetchCierre()}>
+          <TouchableOpacity style={s.refreshBtn} onPress={() => {
+              setTimeFilter('day');
+              setRangeLabel('Hoy');
+              fetchCierre();
+          }}>
               <Text style={s.refreshText}>RESETEAR A HOY</Text>
           </TouchableOpacity>
         </View>
@@ -238,6 +282,8 @@ export default function CierreScreen({ user }) {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#09090b' },
   scroll: { padding: 16 },
+  calendarBtn: { backgroundColor: '#18181b', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#27272a', alignItems: 'center', marginTop: -4 },
+  calendarBtnText: { color: '#a1a1aa', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   kpis: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   kpi: { flex: 1, minWidth: '45%', backgroundColor: '#18181b', borderWidth: 1, borderRadius: 18, padding: 14, alignItems: 'center' },
   kpiVal: { fontSize: 22, fontWeight: '900' },
@@ -266,3 +312,4 @@ const s = StyleSheet.create({
   refreshBtn: { marginTop: 15, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, backgroundColor: '#18181b' },
   refreshText: { color: '#f97316', fontSize: 10, fontWeight: '900' }
 });
+
