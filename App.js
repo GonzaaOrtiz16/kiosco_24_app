@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, View, StatusBar } from 'react-native';
+import { ShoppingCart, Package, CheckCircle2 } from 'lucide-react-native'; // Importamos los íconos
 import LoginScreen from './src/screens/LoginScreen';
 import POSScreen from './src/screens/POSScreen';
 import StockScreen from './src/screens/StockScreen';
 import CierreScreen from './src/screens/CierreScreen';
 
 const Tab = createBottomTabNavigator();
+const PRIMARY_COLOR = '#0ea5e9'; // Tu celeste azulado
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -22,18 +24,35 @@ export default function App() {
       <StatusBar barStyle="light-content" backgroundColor="#09090b" />
       <NavigationContainer>
         <Tab.Navigator
-          screenOptions={{
+          screenOptions={({ route }) => ({
             headerShown: false,
+            // Lógica para mostrar los íconos dinámicamente
+            tabBarIcon: ({ color, size }) => {
+              if (route.name === 'Ventas') {
+                return <ShoppingCart color={color} size={20} />;
+              } else if (route.name === 'Stock') {
+                return <Package color={color} size={20} />;
+              } else if (route.name === 'Cierre') {
+                return <CheckCircle2 color={color} size={20} />;
+              }
+            },
             tabBarStyle: { 
               backgroundColor: '#18181b', 
               borderTopColor: '#27272a', 
-              height: 60,
-              borderTopWidth: 1
+              height: 65,
+              borderTopWidth: 1,
+              paddingBottom: 10,
+              paddingTop: 5
             },
-            tabBarActiveTintColor: '#38bdf8', 
+            tabBarActiveTintColor: PRIMARY_COLOR, 
             tabBarInactiveTintColor: '#52525b',
-            tabBarLabelStyle: { fontWeight: '700', fontSize: 10, textTransform: 'uppercase' },
-          }}
+            tabBarLabelStyle: { 
+              fontWeight: '900', 
+              fontSize: 10, 
+              textTransform: 'uppercase',
+              letterSpacing: 0.5
+            },
+          })}
         >
           <Tab.Screen name="Ventas">
             {(props) => (
@@ -47,7 +66,6 @@ export default function App() {
             )}
           </Tab.Screen>
 
-          {/* Cambiamos la forma de pasar StockScreen para que sea estable en Web */}
           <Tab.Screen name="Stock">
             {(props) => <StockScreen {...props} user={user} />}
           </Tab.Screen>
