@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 
-export default function HistoryNavigator({ onRangeChange }) {
-  const [activeTab, setActiveTab] = useState('day');
-
-  // Opciones de filtrado
+// Recibe 'activeTab' como prop para saber qué botón resaltar
+export default function HistoryNavigator({ onRangeChange, activeTab }) {
+  
   const ranges = [
     { id: 'day', label: 'Hoy' },
     { id: 'week', label: 'Semana' },
@@ -13,8 +12,6 @@ export default function HistoryNavigator({ onRangeChange }) {
   ];
 
   const handleRangeSelect = (rangeId) => {
-    setActiveTab(rangeId);
-    
     const now = new Date();
     let start = new Date();
     let end = new Date();
@@ -25,25 +22,22 @@ export default function HistoryNavigator({ onRangeChange }) {
 
     switch (rangeId) {
       case 'day':
-        // Ya están seteadas a hoy por defecto
+        // Hoy ya está configurado por defecto
         break;
       case 'week':
-        // Restar 7 días
         start.setDate(now.getDate() - 7);
         break;
       case 'month':
-        // Ir al primer día del mes actual
         start.setMonth(now.getMonth() - 1);
         break;
       case 'year':
-        // Ir al primer día del año
         start.setFullYear(now.getFullYear() - 1);
         break;
       default:
         break;
     }
 
-    // Le pasamos las fechas calculadas al componente padre
+    // Notificamos al padre el cambio de rango y el ID seleccionado
     onRangeChange(start, end, rangeId);
   };
 
@@ -54,6 +48,7 @@ export default function HistoryNavigator({ onRangeChange }) {
         {ranges.map((r) => (
           <TouchableOpacity
             key={r.id}
+            // Comparamos con la prop 'activeTab' que viene del padre
             style={[h.tab, activeTab === r.id && h.tabActive]}
             onPress={() => handleRangeSelect(r.id)}
           >
@@ -98,7 +93,7 @@ const h = StyleSheet.create({
     borderColor: '#27272a' 
   },
   tabActive: { 
-    backgroundColor: '#f97316', 
+    backgroundColor: '#f97316', // El color naranja que buscabas
     borderColor: '#f97316' 
   },
   tabText: { 
