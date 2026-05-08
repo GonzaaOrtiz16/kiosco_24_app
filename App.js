@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, StatusBar } from 'react-native';
-// Importamos los iconos
+
+// Importamos los iconos de Lucide
 import { ShoppingCart, Package, LockKeyhole } from 'lucide-react-native';
 
+// Importación de pantallas
 import LoginScreen from './src/screens/LoginScreen';
 import POSScreen from './src/screens/POSScreen';
 import StockScreen from './src/screens/StockScreen';
@@ -18,6 +20,7 @@ export default function App() {
 
   const handleLogout = () => setUser(null);
 
+  // Si no hay usuario, mostramos el Login
   if (!user) return <LoginScreen onLogin={setUser} />;
 
   return (
@@ -27,8 +30,8 @@ export default function App() {
         <Tab.Navigator
           screenOptions={({ route }) => ({
             headerShown: false,
+            // Lógica de iconos corregida
             tabBarIcon: ({ color, size }) => {
-              // Asignación de iconos por ruta
               if (route.name === 'Ventas') {
                 return <ShoppingCart color={color} size={size} />;
               } else if (route.name === 'Stock') {
@@ -55,6 +58,7 @@ export default function App() {
             },
           })}
         >
+          {/* Pantalla de Ventas (POS) */}
           <Tab.Screen name="Ventas">
             {(props) => (
               <POSScreen 
@@ -67,12 +71,20 @@ export default function App() {
             )}
           </Tab.Screen>
 
+          {/* Pantalla de Stock */}
           <Tab.Screen name="Stock">
             {(props) => <StockScreen {...props} user={user} />}
           </Tab.Screen>
 
+          {/* Pantalla de Cierre de Caja */}
           <Tab.Screen name="Cierre">
-            {(props) => <CierreScreen {...props} user={user} movements={movements} />}
+            {(props) => (
+              <CierreScreen 
+                {...props} 
+                user={user} 
+                movements={movements} 
+              />
+            )}
           </Tab.Screen>
         </Tab.Navigator>
       </NavigationContainer>
