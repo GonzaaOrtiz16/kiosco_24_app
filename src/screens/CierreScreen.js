@@ -4,17 +4,18 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { getMovementsByRange, supabase } from '../lib/supabase';
 import HistoryNavigator from '../components/HistoryNavigator';
 
+const PRIMARY_COLOR = '#0ea5e9'; // Celeste azulado
+
 const fmt = (n) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n);
 const timeStr = (iso) => new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 
 export default function CierreScreen({ user }) {
   const [filter, setFilter] = useState('all');
-  const [timeFilter, setTimeFilter] = useState('day'); // Controla el naranja del Navigator
+  const [timeFilter, setTimeFilter] = useState('day'); 
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [rangeLabel, setRangeLabel] = useState('Hoy');
   
-  // Estados para el Calendario
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
 
@@ -41,8 +42,8 @@ export default function CierreScreen({ user }) {
   }, []);
 
   const handleRangeChange = (start, end, type) => {
-    const labels = { day: 'Hoy', week: 'Última Semana', month: 'Último Mes', year: 'Último Año' };
-    setTimeFilter(type); // Sincroniza el color naranja
+    const labels = { day: 'Hoy', week: 'Semana', month: 'Mes', year: 'Año' };
+    setTimeFilter(type); 
     setRangeLabel(labels[type]);
     fetchCierre(start, end);
   };
@@ -51,7 +52,7 @@ export default function CierreScreen({ user }) {
     setShowCalendar(false);
     if (date) {
       setSelectedDate(date);
-      setTimeFilter('custom'); // Desmarca los botones HOY/SEMANA/etc
+      setTimeFilter('custom'); 
       setRangeLabel(date.toLocaleDateString('es-AR'));
       
       const start = new Date(date);
@@ -141,7 +142,7 @@ export default function CierreScreen({ user }) {
 
   if (loading) return (
     <View style={[s.safe, {justifyContent:'center'}]}>
-        <ActivityIndicator color="#f97316" size="large"/>
+        <ActivityIndicator color={PRIMARY_COLOR} size="large"/>
     </View>
   );
 
@@ -149,7 +150,6 @@ export default function CierreScreen({ user }) {
     <SafeAreaView style={s.safe}>
       <ScrollView style={s.scroll}>
         
-        {/* NAVEGADOR DE HISTORIAL Y CALENDARIO */}
         {isEncargado && (
           <View style={{ marginBottom: 12 }}>
             <HistoryNavigator 
@@ -157,20 +157,35 @@ export default function CierreScreen({ user }) {
                 activeTab={timeFilter} 
             />
             
-            <TouchableOpacity 
-              style={s.calendarBtn} 
-              onPress={() => setShowCalendar(true)}
-            >
-              <Text style={s.calendarBtnText}>📅 BUSCAR POR FECHA ESPECÍFICA</Text>
-            </TouchableOpacity>
+            {/* Lógica Dual: Web o App */}
+            {Platform.OS === 'web' ? (
+              <View style={s.webCalendarBox}>
+                <Text style={s.calendarLabel}>SELECCIONAR FECHA ESPECÍFICA</Text>
+                <input 
+                  type="date" 
+                  style={s.webDateInput}
+                  onChange={(e) => {
+                    const d = new Date(e.target.value + "T00:00:00");
+                    onCalendarChange(null, d);
+                  }}
+                />
+              </View>
+            ) : (
+              <TouchableOpacity 
+                style={s.calendarBtn} 
+                onPress={() => setShowCalendar(true)}
+              >
+                <Text style={s.calendarBtnText}>📅 BUSCAR POR FECHA ESPECÍFICA</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
-        {showCalendar && (
+        {showCalendar && Platform.OS !== 'web' && (
           <DateTimePicker
             value={selectedDate}
             mode="date"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            display="default"
             onChange={onCalendarChange}
             maximumDate={new Date()}
           />
@@ -179,7 +194,7 @@ export default function CierreScreen({ user }) {
         {/* INDICADORES (KPIs) */}
         <View style={s.kpis}>
           {[
-            ['Recaudado', fmt(totalRevenue), '#f97316'],
+            ['Recaudado', fmt(totalRevenue), PRIMARY_COLOR],
             ['Unidades', totalUnits, '#a78bfa'],
             ['Ventas', activeGroups.length, '#22c55e'],
             ['Anuladas', voidedGroups.length, '#ef4444'],
@@ -282,6 +297,11 @@ export default function CierreScreen({ user }) {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#09090b' },
   scroll: { padding: 16 },
+  // Estilo para Web
+  webCalendarBox: { backgroundColor: '#18181b', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#27272a', marginTop: -4 },
+  calendarLabel: { color: '#71717a', fontSize: 10, fontWeight: '900', textAlign: 'center', marginBottom: 8 },
+  webDateInput: { backgroundColor: '#09090b', color: '#fff', border: '1px solid #27272a', borderRadius: 8, padding: 8, width: '100%', cursor: 'pointer' },
+  
   calendarBtn: { backgroundColor: '#18181b', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#27272a', alignItems: 'center', marginTop: -4 },
   calendarBtnText: { color: '#a1a1aa', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   kpis: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
@@ -293,10 +313,10 @@ const s = StyleSheet.create({
   sellerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#27272a' },
   sellerName: { color: '#fff', fontWeight: '900', fontSize: 13 },
   sellerSub: { color: '#52525b', fontSize: 11 },
-  sellerAmt: { color: '#f97316', fontWeight: '900', fontSize: 14 },
+  sellerAmt: { color: PRIMARY_COLOR, fontWeight: '900', fontSize: 14 },
   tabs: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   tab: { flex: 1, backgroundColor: '#18181b', borderRadius: 14, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: '#27272a' },
-  tabActive: { backgroundColor: '#f97316', borderColor: '#f97316' },
+  tabActive: { backgroundColor: PRIMARY_COLOR, borderColor: PRIMARY_COLOR },
   tabText: { color: '#71717a', fontWeight: '900', fontSize: 11, textTransform: 'uppercase' },
   tabTextActive: { color: '#fff' },
   saleRow: { flexDirection: 'row', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#27272a' },
@@ -310,6 +330,6 @@ const s = StyleSheet.create({
   ticketSub: { color: '#52525b', fontSize: 12, textAlign: 'center' },
   ticketTotal: { color: '#fff', fontSize: 38, fontWeight: '900', fontStyle: 'italic', marginVertical: 8 },
   refreshBtn: { marginTop: 15, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, backgroundColor: '#18181b' },
-  refreshText: { color: '#f97316', fontSize: 10, fontWeight: '900' }
+  refreshText: { color: PRIMARY_COLOR, fontSize: 10, fontWeight: '900' }
 });
 
