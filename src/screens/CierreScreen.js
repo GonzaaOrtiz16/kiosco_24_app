@@ -157,14 +157,15 @@ export default function CierreScreen({ user }) {
                 activeTab={timeFilter} 
             />
             
-            {/* Lógica Dual: Web o App */}
             {Platform.OS === 'web' ? (
               <View style={s.webCalendarBox}>
                 <Text style={s.calendarLabel}>SELECCIONAR FECHA ESPECÍFICA</Text>
                 <input 
                   type="date" 
                   style={s.webDateInput}
+                  onClick={(e) => e.target.showPicker && e.target.showPicker()}
                   onChange={(e) => {
+                    if (!e.target.value) return;
                     const d = new Date(e.target.value + "T00:00:00");
                     onCalendarChange(null, d);
                   }}
@@ -191,7 +192,6 @@ export default function CierreScreen({ user }) {
           />
         )}
 
-        {/* INDICADORES (KPIs) */}
         <View style={s.kpis}>
           {[
             ['Recaudado', fmt(totalRevenue), PRIMARY_COLOR],
@@ -206,7 +206,6 @@ export default function CierreScreen({ user }) {
           ))}
         </View>
 
-        {/* DESGLOSE POR VENDEDOR */}
         {isEncargado && bySeller.length > 0 && (
           <View style={s.card}>
             <Text style={s.cardTitle}>DESGLOSE POR VENDEDOR ({rangeLabel})</Text>
@@ -222,7 +221,6 @@ export default function CierreScreen({ user }) {
           </View>
         )}
 
-        {/* SELECTOR DE FILTROS (Activas/Anuladas) */}
         <View style={s.tabs}>
           {[['all','Todas'],['active','Activas'],['voided','Anuladas']].map(([k,l]) => (
             <TouchableOpacity 
@@ -235,7 +233,6 @@ export default function CierreScreen({ user }) {
           ))}
         </View>
 
-        {/* LISTADO DE VENTAS */}
         <View style={s.card}>
           <Text style={s.cardTitle}>
             {isEncargado ? `MOVIMIENTOS: ${rangeLabel.toUpperCase()}` : "MIS VENTAS DE HOY"}
@@ -273,7 +270,6 @@ export default function CierreScreen({ user }) {
           })}
         </View>
 
-        {/* TICKET DE CIERRE */}
         <View style={s.ticket}>
           <Text style={s.ticketTitle}>HMS KIOSCO 24HS — {isEncargado ? `CIERRE ${rangeLabel.toUpperCase()}` : 'RESUMEN HOY'}</Text>
           <Text style={s.ticketSub}>
@@ -297,11 +293,19 @@ export default function CierreScreen({ user }) {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#09090b' },
   scroll: { padding: 16 },
-  // Estilo para Web
   webCalendarBox: { backgroundColor: '#18181b', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#27272a', marginTop: -4 },
   calendarLabel: { color: '#71717a', fontSize: 10, fontWeight: '900', textAlign: 'center', marginBottom: 8 },
-  webDateInput: { backgroundColor: '#09090b', color: '#fff', border: '1px solid #27272a', borderRadius: 8, padding: 8, width: '100%', cursor: 'pointer' },
-  
+  webDateInput: { 
+    backgroundColor: '#09090b', 
+    color: '#fff', 
+    border: '1px solid #27272a', 
+    borderRadius: 12, 
+    padding: 10, 
+    width: '100%', 
+    cursor: 'pointer',
+    textAlign: 'center',
+    fontSize: 14
+  },
   calendarBtn: { backgroundColor: '#18181b', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#27272a', alignItems: 'center', marginTop: -4 },
   calendarBtnText: { color: '#a1a1aa', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   kpis: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
@@ -332,4 +336,3 @@ const s = StyleSheet.create({
   refreshBtn: { marginTop: 15, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, backgroundColor: '#18181b' },
   refreshText: { color: PRIMARY_COLOR, fontSize: 10, fontWeight: '900' }
 });
-
