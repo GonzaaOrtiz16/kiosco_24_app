@@ -8,7 +8,7 @@ import { useIsFocused } from '@react-navigation/native';
 // Iconos modernos
 import { 
   ShoppingCart, Settings, LogOut, PackageSearch, 
-  CheckCircle2, Trash2, UserPlus, X 
+  CheckCircle2, Trash2, UserPlus, X, LockKeyhole 
 } from 'lucide-react-native';
 
 // Importación de Componentes Modulares
@@ -19,7 +19,7 @@ import HistorySection from '../components/HistorySection';
 import ScannerHibrido from '../components/ScannerHibrido';
 
 // Libs y Pantallas
-import { getProducts, updateStock, insertMovements, getMovementsToday } from '../lib/supabase';
+import { getProducts, updateStock, insertMovements, supabase } from '../lib/supabase';
 import AdminScreen from './AdminScreen'; 
 
 const fmt = (n) => new Intl.NumberFormat('es-AR', { 
@@ -39,6 +39,7 @@ export default function POSScreen({ user, onLogout }) {
   const [view, setView] = useState('pos');
   
   const [pinVisible, setPinVisible] = useState(false);
+  const [authType, setAuthType] = useState('void'); // 'void' o 'close_shift'
   const [tempVoidData, setTempVoidData] = useState(null);
   
   const scannerInputRef = useRef(null);
@@ -47,17 +48,71 @@ export default function POSScreen({ user, onLogout }) {
     loadInitialData(); 
   }, []);
 
+  // Lógica de carga con filtro por último cierre personal
   const loadInitialData = async () => {
     try {
       setLoading(true);
-      const [dbProducts, dbMovements] = await Promise.all([
+      
+      // 1. Buscamos el último cierre de este usuario específico
+      const { data: lastClose } = await supabase
+        .from('stock_movements')
+        .select('created_at')
+        .eq('movement_type', 'cierre_caja')
+        .eq('seller_name', user?.full_name)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      // Si no hay cierre previo, usamos el inicio del día de hoy
+      const startTime = lastClose?.[0]?.created_at || new Date(new Date().setHours(0,0,0,0)).toISOString();
+
+      // 2. Traemos productos y movimientos DESDE ese cierre y SOLO de este usuario
+      const [dbProducts, { data: dbMovements }] = await Promise.all([
         getProducts(),
-        getMovementsToday()
+        supabase.from('stock_movements')
+          .select('*')
+          .gt('created_at', startTime)
+          .eq('seller_name', user?.full_name)
+          .order('created_at', { ascending: false })
       ]);
+
       setProducts(dbProducts || []);
       setMovements(dbMovements || []);
     } catch (error) {
-      Alert.alert('Error', 'No se pudieron cargar los datos.');
+      Alert.alert('Error', 'No se pudieron cargar los datos del turno.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAuthSuccess = () => {
+    if (authType === 'void') {
+      doVoid(tempVoidData.sg, tempVoidData.items);
+    } else if (authType === 'close_shift') {
+      executeCloseShift();
+    }
+    setPinVisible(false);
+  };
+
+  const executeCloseShift = async () => {
+    try {
+      setLoading(true);
+      const { error } = await supabase.from('stock_movements').insert([{
+        product_id: null,
+        product_title: 'CIERRE DE CAJA PERSONAL',
+        movement_type: 'cierre_caja',
+        quantity: 0,
+        price: 0,
+        seller_name: user?.full_name,
+        sale_group: new Date().toISOString()
+      }]);
+
+      if (error) throw error;
+
+      Alert.alert('✓ Turno Finalizado', 'Tu historial de ventas se ha reiniciado.');
+      setCart([]);
+      loadInitialData(); // Esto limpiará la vista solo para este usuario
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo registrar el cierre.');
     } finally {
       setLoading(false);
     }
@@ -152,7 +207,6 @@ export default function POSScreen({ user, onLogout }) {
       Alert.alert('Error', 'No se pudo anular la venta');
     } finally {
       setLoading(false);
-      setPinVisible(false);
     }
   };
 
@@ -177,10 +231,7 @@ export default function POSScreen({ user, onLogout }) {
             }
           }} 
         />
-        <TouchableOpacity 
-          onPress={() => setScanning(false)} 
-          style={s.closeScannerBtn}
-        >
+        <TouchableOpacity onPress={() => setScanning(false)} style={s.closeScannerBtn}>
           <X color="white" size={24} />
           <Text style={{color: 'white', fontWeight: '900', marginLeft: 5}}>SALIR</Text>
         </TouchableOpacity>
@@ -198,9 +249,19 @@ export default function POSScreen({ user, onLogout }) {
         </TouchableOpacity>
         
         <View style={s.titleContainer}>
-            {/* CAMBIO DE VERSIÓN PARA VERIFICAR ACTUALIZACIÓN */}
-            <Text style={s.headerTitle}>KIOSCO <Text style={s.blue}>24HS V2.1</Text></Text>
+            <Text style={s.headerTitle}>HMS <Text style={s.blue}>KIOSCO 24HS</Text></Text>
         </View>
+
+        {/* Botón de Cierre de Caja con PIN */}
+        <TouchableOpacity 
+          onPress={() => {
+            setAuthType('close_shift');
+            setPinVisible(true);
+          }} 
+          style={[s.iconBtn, { marginRight: 8, borderColor: '#ef4444' }]}
+        >
+          <LockKeyhole color="#ef4444" size={20} />
+        </TouchableOpacity>
 
         <TouchableOpacity onPress={() => setView('admin')} style={s.iconBtn}>
           <Settings color="#38bdf8" size={20} />
@@ -282,6 +343,7 @@ export default function POSScreen({ user, onLogout }) {
           groups={historyGroups} 
           isVoided={(sg) => movements.some(m => m.movement_type === 'anulacion' && m.sale_group === sg)} 
           onVoid={(sg, items) => {
+            setAuthType('void');
             setTempVoidData({ sg, items });
             if (user?.role === 'encargado') {
                 Alert.alert("Anular", "¿Confirmas?", [{text:"No"}, {text:"Sí", onPress:() => doVoid(sg, items)}]);
@@ -294,7 +356,7 @@ export default function POSScreen({ user, onLogout }) {
       <AuthModal 
         visible={pinVisible} 
         onClose={() => setPinVisible(false)} 
-        onSuccess={() => doVoid(tempVoidData.sg, tempVoidData.items)} 
+        onSuccess={handleAuthSuccess} 
       />
     </SafeAreaView>
   );
@@ -305,7 +367,7 @@ const s = StyleSheet.create({
   topBar: { height: 60, backgroundColor: '#09090b', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#18181b' },
   iconBtn: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#18181b', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#27272a' },
   titleContainer: { flex: 1, alignItems: 'center' },
-  headerTitle: { color: '#f4f4f5', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
+  headerTitle: { color: '#f4f4f5', fontSize: 15, fontWeight: '900', letterSpacing: 1 },
   blue: { color: '#38bdf8' },
   scroll: { flex: 1, paddingHorizontal: 16 },
   userRow: { flexDirection: 'row', alignItems: 'center', marginTop: 15, marginBottom: 5 },
@@ -333,7 +395,7 @@ const s = StyleSheet.create({
     right: 20, 
     flexDirection: 'row', 
     alignItems: 'center', 
-    backgroundColor: '#38bdf8', // CAMBIO DE COLOR A AZUL PARA DISTINGUIR
+    backgroundColor: '#38bdf8', 
     padding: 12, 
     borderRadius: 15,
     zIndex: 99
