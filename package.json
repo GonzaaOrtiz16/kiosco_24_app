@@ -13,7 +13,6 @@
     "dev:tauri": "tauri dev"
   },
   "dependencies": {
-    "lucide-react-native": "^0.300.0",
     "@expo/metro-runtime": "~6.1.2",
     "@react-navigation/bottom-tabs": "^7.15.9",
     "@react-native-community/datetimepicker": "^8.1.1",
