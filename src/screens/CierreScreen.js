@@ -64,15 +64,23 @@ export default function CierreScreen({ user }) {
   }, [user]);
 
   useEffect(() => {
-    // Si no es encargado, forzamos siempre el modo turno al cargar
-    fetchCierre(null, null, !isEncargado || timeFilter === 'turno');
+    fetchCierre(null, null, timeFilter === 'turno' || !isEncargado);
   }, [fetchCierre, isEncargado]);
 
+  // Lógica ON/OFF para los filtros
   const handleRangeChange = (start, end, type) => {
-    if (!isEncargado) return; // Guardián de seguridad
-    setTimeFilter(type); 
-    setRangeLabel({ day: 'Hoy', week: 'Semana', month: 'Mes', year: 'Año' }[type] || 'Personalizado');
-    fetchCierre(start, end, false);
+    if (!isEncargado) return;
+
+    // Si el filtro que toco ya es el que está activo, vuelvo al turno (OFF)
+    if (type === timeFilter) {
+      setTimeFilter('turno');
+      fetchCierre(null, null, true);
+    } else {
+      // Si es uno nuevo, lo activo (ON)
+      setTimeFilter(type); 
+      setRangeLabel({ day: 'Hoy', week: 'Semana', month: 'Mes', year: 'Año' }[type] || 'Personalizado');
+      fetchCierre(start, end, false);
+    }
   };
 
   const onCalendarChange = (event, date) => {
@@ -139,12 +147,11 @@ export default function CierreScreen({ user }) {
     <SafeAreaView style={s.safe}>
       <ScrollView style={s.scroll}>
         
-        {/* SOLO EL ENCARGADO VE LOS FILTROS DE TIEMPO Y CALENDARIO */}
         {isEncargado && (
           <View style={{ marginBottom: 12 }}>
             <HistoryNavigator 
                 onRangeChange={handleRangeChange} 
-                activeTab={timeFilter === 'turno' ? 'day' : timeFilter} 
+                activeTab={timeFilter} 
             />
             
             {Platform.OS === 'web' ? (
@@ -157,7 +164,9 @@ export default function CierreScreen({ user }) {
               </View>
             ) : (
               <TouchableOpacity style={s.calendarBtn} onPress={() => setShowCalendar(true)}>
-                <Text style={s.calendarBtnText}>📅 BUSCAR POR FECHA ESPECÍFICA</Text>
+                <Text style={[s.calendarBtnText, timeFilter === 'custom' && {color: PRIMARY_COLOR}]}>
+                  {timeFilter === 'custom' ? `📅 FECHA: ${rangeLabel}` : '📅 BUSCAR POR FECHA'}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -214,8 +223,13 @@ export default function CierreScreen({ user }) {
           <Text style={s.ticketTitle}>HMS KIOSCO 24HS — {rangeLabel.toUpperCase()}</Text>
           <Text style={s.ticketSub}>{user?.full_name} · {new Date().toLocaleDateString('es-AR')}</Text>
           <Text style={s.ticketTotal}>{fmt(totalRevenue)}</Text>
-          <TouchableOpacity style={s.refreshBtn} onPress={() => { setTimeFilter('turno'); fetchCierre(null, null, true); }}>
-              <Text style={s.refreshText}>RESETEAR A TURNO ACTUAL</Text>
+          <TouchableOpacity 
+            style={[s.refreshBtn, timeFilter === 'turno' && {backgroundColor: PRIMARY_COLOR + '20', borderColor: PRIMARY_COLOR}]} 
+            onPress={() => { setTimeFilter('turno'); fetchCierre(null, null, true); }}
+          >
+              <Text style={[s.refreshText, timeFilter === 'turno' && {color: PRIMARY_COLOR}]}>
+                {timeFilter === 'turno' ? 'TURNO ACTUAL ACTIVO' : 'VOLVER AL TURNO ACTUAL'}
+              </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -252,7 +266,7 @@ const s = StyleSheet.create({
   ticketTitle: { color: '#71717a', fontSize: 11, fontWeight: '900', textAlign: 'center' },
   ticketSub: { color: '#52525b', fontSize: 12, textAlign: 'center' },
   ticketTotal: { color: '#fff', fontSize: 38, fontWeight: '900', marginVertical: 8 },
-  refreshBtn: { marginTop: 15, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, backgroundColor: '#18181b' },
-  refreshText: { color: PRIMARY_COLOR, fontSize: 10, fontWeight: '900' }
+  refreshBtn: { marginTop: 15, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, backgroundColor: '#18181b', borderWidth: 1, borderColor: 'transparent' },
+  refreshText: { color: '#52525b', fontSize: 10, fontWeight: '900' }
 });
 
