@@ -53,7 +53,6 @@ export default function POSScreen({ user, onLogout }) {
     try {
       setLoading(true);
       
-      // 1. Buscamos el último cierre de este usuario específico
       const { data: lastClose } = await supabase
         .from('stock_movements')
         .select('created_at')
@@ -62,10 +61,8 @@ export default function POSScreen({ user, onLogout }) {
         .order('created_at', { ascending: false })
         .limit(1);
 
-      // Si no hay cierre previo, usamos el inicio del día de hoy
       const startTime = lastClose?.[0]?.created_at || new Date(new Date().setHours(0,0,0,0)).toISOString();
 
-      // 2. Traemos productos y movimientos DESDE ese cierre y SOLO de este usuario
       const [dbProducts, { data: dbMovements }] = await Promise.all([
         getProducts(),
         supabase.from('stock_movements')
@@ -85,7 +82,7 @@ export default function POSScreen({ user, onLogout }) {
   };
 
   const handleAuthSuccess = () => {
-    if (authType === 'void') {
+    if (authType === 'void' && tempVoidData) {
       doVoid(tempVoidData.sg, tempVoidData.items);
     } else if (authType === 'close_shift') {
       executeCloseShift();
@@ -110,7 +107,7 @@ export default function POSScreen({ user, onLogout }) {
 
       Alert.alert('✓ Turno Finalizado', 'Tu historial de ventas se ha reiniciado.');
       setCart([]);
-      loadInitialData(); // Esto limpiará la vista solo para este usuario
+      loadInitialData(); 
     } catch (e) {
       Alert.alert('Error', 'No se pudo registrar el cierre.');
     } finally {
@@ -187,26 +184,49 @@ export default function POSScreen({ user, onLogout }) {
   const doVoid = async (sg, items) => {
     try {
       setLoading(true);
+
+      // 1. Verificación de seguridad: Evitar anular dos veces lo mismo
+      const yaAnulada = movements.some(m => m.movement_type === 'anulacion' && m.sale_group === sg);
+      if (yaAnulada) {
+        Alert.alert('Aviso', 'Esta venta ya fue anulada anteriormente.');
+        return;
+      }
+
+      // 2. Insertar los movimientos de anulación en la base de datos
       const voids = items.map(m => ({ 
         product_id: m.product_id, 
         product_title: m.product_title, 
         movement_type: 'anulacion', 
-        quantity: Math.abs(m.quantity), 
+        quantity: Math.abs(m.quantity), // Positivo para que vuelva a sumar al stock
         price: m.price, 
         seller_name: user?.full_name, 
         sale_group: sg 
       }));
       await insertMovements(voids);
+
+      // 3. Devolver el stock a los productos de forma segura
       for (const item of items) {
-        const prod = products.find(p => p.id === item.product_id);
-        if (prod) await updateStock(item.product_id, prod.stock + Math.abs(item.quantity));
+        // Buscamos el stock directamente en la DB para evitar errores si la lista local está desactualizada
+        const { data: dbProd } = await supabase
+          .from('products')
+          .select('stock')
+          .eq('id', item.product_id)
+          .single();
+
+        if (dbProd) {
+          await updateStock(item.product_id, dbProd.stock + Math.abs(item.quantity));
+        }
       }
+
+      // 4. Recargar la pantalla
       await loadInitialData();
       Alert.alert('Éxito', 'Venta anulada correctamente');
     } catch (e) {
+      console.error("Error al anular:", e);
       Alert.alert('Error', 'No se pudo anular la venta');
     } finally {
       setLoading(false);
+      setTempVoidData(null); // Limpiamos el estado temporal
     }
   };
 
@@ -252,7 +272,6 @@ export default function POSScreen({ user, onLogout }) {
             <Text style={s.headerTitle}>HMS <Text style={s.blue}>KIOSCO 24HS</Text></Text>
         </View>
 
-        {/* Botón de Cierre de Caja con PIN */}
         <TouchableOpacity 
           onPress={() => {
             setAuthType('close_shift');
@@ -345,9 +364,21 @@ export default function POSScreen({ user, onLogout }) {
           onVoid={(sg, items) => {
             setAuthType('void');
             setTempVoidData({ sg, items });
-            if (user?.role === 'encargado') {
-                Alert.alert("Anular", "¿Confirmas?", [{text:"No"}, {text:"Sí", onPress:() => doVoid(sg, items)}]);
-            } else setPinVisible(true);
+            
+            // CORRECCIÓN DE ROLES: Permite a encargados o administradores anular sin PIN
+            const userRole = user?.role?.toLowerCase() || '';
+            if (userRole === 'encargado' || userRole === 'admin' || userRole === 'administrador') {
+                Alert.alert(
+                  "Anular Venta", 
+                  "¿Confirmas que deseas anular esta venta y devolver el stock?", 
+                  [
+                    { text: "No", style: "cancel" }, 
+                    { text: "Sí", onPress: () => doVoid(sg, items) }
+                  ]
+                );
+            } else {
+              setPinVisible(true);
+            }
           }} 
         />
         <View style={{ height: 100 }} />
@@ -401,3 +432,4 @@ const s = StyleSheet.create({
     zIndex: 99
   }
 });
+
