@@ -103,13 +103,19 @@ export default function POSScreen({ user, onLogout }) {
   
   const scannerInputRef = useRef(null);
 
-  useEffect(() => { if (isFocused) loadInitialData(); }, [isFocused]);
-
+  // --- FUNCIÓN DE CARGA ---
   const loadInitialData = async () => {
     try {
       setLoading(true);
-      const { data: lastClose } = await supabase.from('stock_movements').select('created_at').eq('movement_type', 'cierre_caja').eq('seller_name', user?.full_name).order('created_at', { ascending: false }).limit(1);
+      const { data: lastClose } = await supabase.from('stock_movements')
+        .select('created_at')
+        .eq('movement_type', 'cierre_caja')
+        .eq('seller_name', user?.full_name)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
       const startTime = lastClose?.[0]?.created_at || new Date(new Date().setHours(0,0,0,0)).toISOString();
+      
       const [dbProducts, { data: dbMovements }] = await Promise.all([
         getProducts(),
         supabase.from('stock_movements').select('*').gt('created_at', startTime).eq('seller_name', user?.full_name).order('created_at', { ascending: false })
@@ -117,11 +123,35 @@ export default function POSScreen({ user, onLogout }) {
       setProducts(dbProducts || []);
       setMovements(dbMovements || []);
     } catch (error) {
-      Alert.alert('Error', 'No se pudieron cargar los datos.');
+      console.error(error);
     } finally {
       setLoading(false);
     }
   };
+
+  // --- EFECTO DE REALTIME + ENFOQUE ---
+  useEffect(() => {
+    let channel;
+    if (isFocused) {
+      loadInitialData();
+
+      // Suscripción a cambios en tiempo real
+      channel = supabase
+        .channel('pos-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'stock_movements' },
+          () => {
+            loadInitialData();
+          }
+        )
+        .subscribe();
+    }
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [isFocused]);
 
   const handleAuthSuccess = () => {
     if (authType === 'void' && tempVoidData) {
@@ -190,7 +220,7 @@ export default function POSScreen({ user, onLogout }) {
         const { data: d } = await supabase.from('products').select('stock').eq('id', item.id).single();
         await updateStock(item.id, Math.max(0, (d?.stock || item.stock) - item.qty)); 
       }
-      await loadInitialData();
+      // No hace falta loadInitialData() manual aquí porque el realtime lo disparará
       setCart([]);
       Alert.alert('✓ Venta confirmada', fmt(total));
     } catch (error) {
@@ -217,7 +247,17 @@ export default function POSScreen({ user, onLogout }) {
             <View style={s.activeDot} /><Text style={s.userBadge}>{user?.full_name} • {user?.role?.toUpperCase()}</Text>
         </View>
 
-        <ScannerInput ref={scannerInputRef} value={search} onChangeText={(t) => { setSearch(t); const f = products.find(p => p.barcode === t.trim()); if (f) { addToCart(f); setSearch(''); }}} onCameraPress={() => setScanning(true)} isFocusedMode={isFocused && !pinVisible && !scanning} />
+        <ScannerInput 
+          ref={scannerInputRef} 
+          value={search} 
+          onChangeText={(t) => { 
+            setSearch(t); 
+            const f = products.find(p => p.barcode === t.trim()); 
+            if (f) { addToCart(f); setSearch(''); }
+          }} 
+          onCameraPress={() => setScanning(true)} 
+          isFocusedMode={isFocused && !pinVisible && !scanning} 
+        />
 
         {results.map(p => (
           <TouchableOpacity key={p.id} style={s.result} onPress={() => addToCart(p)}>
@@ -293,4 +333,3 @@ const s = StyleSheet.create({
   mBtn: { flex: 1, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   mBtnText: { color: '#fff', fontWeight: '900', fontSize: 12 }
 });
-
