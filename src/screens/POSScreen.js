@@ -44,11 +44,11 @@ export default function POSScreen({ user, onLogout }) {
   
   const scannerInputRef = useRef(null);
 
+  // Recarga datos al montar y cada vez que la pantalla vuelve a estar en foco
   useEffect(() => { 
-    loadInitialData(); 
-  }, []);
+    if (isFocused) loadInitialData(); 
+  }, [isFocused]);
 
-  // Lógica de carga con filtro por último cierre personal
   const loadInitialData = async () => {
     try {
       setLoading(true);
@@ -124,14 +124,22 @@ export default function POSScreen({ user, onLogout }) {
     ).slice(0, 5);
   }, [search, products]);
 
+  // AJUSTE: Agrupa incluyendo el dbTime (created_at) para el HistorySection
   const historyGroups = useMemo(() => {
     const g = {};
-    movements.filter(m => m.movement_type === 'venta' && m.seller_name === user?.full_name)
+    movements
+      .filter(m => m.movement_type === 'venta' && m.seller_name === user?.full_name)
       .forEach(m => { 
-        if (!g[m.sale_group]) g[m.sale_group] = []; 
-        g[m.sale_group].push(m); 
+        if (!g[m.sale_group]) {
+          g[m.sale_group] = {
+            items: [],
+            dbTime: m.created_at
+          };
+        }
+        g[m.sale_group].items.push(m); 
       });
-    return Object.entries(g).sort(([a],[b]) => b.localeCompare(a));
+    // Ordenamos por dbTime de más reciente a más antiguo
+    return Object.entries(g).sort(([,a],[,b]) => b.dbTime.localeCompare(a.dbTime));
   }, [movements, user]);
 
   const total = useMemo(() => cart.reduce((s, c) => s + c.price * c.qty, 0), [cart]);
@@ -168,9 +176,19 @@ export default function POSScreen({ user, onLogout }) {
     try {
       setLoading(true);
       await insertMovements(newMovs);
+      
+      // AJUSTE DE SEGURIDAD: Actualiza stock basado en el valor actual de la DB
       for (const item of cart) { 
-        await updateStock(item.id, Math.max(0, item.stock - item.qty)); 
+        const { data: dbProd } = await supabase
+          .from('products')
+          .select('stock')
+          .eq('id', item.id)
+          .single();
+        
+        const currentStock = dbProd ? dbProd.stock : item.stock;
+        await updateStock(item.id, Math.max(0, currentStock - item.qty)); 
       }
+      
       await loadInitialData();
       setCart([]);
       Alert.alert('✓ Venta confirmada', fmt(totalVenta));
@@ -184,29 +202,24 @@ export default function POSScreen({ user, onLogout }) {
   const doVoid = async (sg, items) => {
     try {
       setLoading(true);
-
-      // 1. Verificación de seguridad: Evitar anular dos veces lo mismo
       const yaAnulada = movements.some(m => m.movement_type === 'anulacion' && m.sale_group === sg);
       if (yaAnulada) {
         Alert.alert('Aviso', 'Esta venta ya fue anulada anteriormente.');
         return;
       }
 
-      // 2. Insertar los movimientos de anulación en la base de datos
       const voids = items.map(m => ({ 
         product_id: m.product_id, 
         product_title: m.product_title, 
         movement_type: 'anulacion', 
-        quantity: Math.abs(m.quantity), // Positivo para que vuelva a sumar al stock
+        quantity: Math.abs(m.quantity), 
         price: m.price, 
         seller_name: user?.full_name, 
         sale_group: sg 
       }));
       await insertMovements(voids);
 
-      // 3. Devolver el stock a los productos de forma segura
       for (const item of items) {
-        // Buscamos el stock directamente en la DB para evitar errores si la lista local está desactualizada
         const { data: dbProd } = await supabase
           .from('products')
           .select('stock')
@@ -218,15 +231,13 @@ export default function POSScreen({ user, onLogout }) {
         }
       }
 
-      // 4. Recargar la pantalla
       await loadInitialData();
       Alert.alert('Éxito', 'Venta anulada correctamente');
     } catch (e) {
-      console.error("Error al anular:", e);
       Alert.alert('Error', 'No se pudo anular la venta');
     } finally {
       setLoading(false);
-      setTempVoidData(null); // Limpiamos el estado temporal
+      setTempVoidData(null);
     }
   };
 
@@ -365,7 +376,6 @@ export default function POSScreen({ user, onLogout }) {
             setAuthType('void');
             setTempVoidData({ sg, items });
             
-            // CORRECCIÓN DE ROLES: Permite a encargados o administradores anular sin PIN
             const userRole = user?.role?.toLowerCase() || '';
             if (userRole === 'encargado' || userRole === 'admin' || userRole === 'administrador') {
                 Alert.alert(
