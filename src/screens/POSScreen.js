@@ -103,14 +103,14 @@ export default function POSScreen({ user, onLogout }) {
   
   const scannerInputRef = useRef(null);
 
-  // --- FUNCIÓN DE CARGA ---
+  // --- CARGA DE DATOS SIN FILTROS DE VENDEDOR ---
   const loadInitialData = async () => {
     try {
       setLoading(true);
+      // Buscamos el último cierre de caja general (para que ambos vean el mismo turno)
       const { data: lastClose } = await supabase.from('stock_movements')
         .select('created_at')
         .eq('movement_type', 'cierre_caja')
-        .eq('seller_name', user?.full_name)
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -118,31 +118,33 @@ export default function POSScreen({ user, onLogout }) {
       
       const [dbProducts, { data: dbMovements }] = await Promise.all([
         getProducts(),
-        supabase.from('stock_movements').select('*').gt('created_at', startTime).eq('seller_name', user?.full_name).order('created_at', { ascending: false })
+        supabase.from('stock_movements')
+          .select('*')
+          .gt('created_at', startTime)
+          .order('created_at', { ascending: false })
       ]);
       setProducts(dbProducts || []);
       setMovements(dbMovements || []);
     } catch (error) {
-      console.error(error);
+      console.error("Error en carga:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- EFECTO DE REALTIME + ENFOQUE ---
+  // --- REALTIME: ESCUCHA TODO ---
   useEffect(() => {
     let channel;
     if (isFocused) {
       loadInitialData();
 
-      // Suscripción a cambios en tiempo real
       channel = supabase
-        .channel('pos-changes')
+        .channel('pos-global-sync')
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'stock_movements' },
           () => {
-            loadInitialData();
+            loadInitialData(); // Si alguien vende o anula, se refresca para ambos
           }
         )
         .subscribe();
@@ -168,7 +170,7 @@ export default function POSScreen({ user, onLogout }) {
       await supabase.from('stock_movements').insert([{
         product_id: null, product_title: 'CIERRE DE CAJA', movement_type: 'cierre_caja', quantity: 0, price: 0, seller_name: user?.full_name, sale_group: new Date().toISOString()
       }]);
-      Alert.alert('✓ Turno Finalizado', 'Historial reiniciado.');
+      Alert.alert('✓ Turno Finalizado', 'Historial reiniciado para todos.');
       setCart([]);
       loadInitialData(); 
     } catch (e) {
@@ -184,15 +186,16 @@ export default function POSScreen({ user, onLogout }) {
     return products.filter(p => (p.name || p.title)?.toLowerCase().includes(q) || p.barcode?.toLowerCase().includes(q)).slice(0, 5);
   }, [search, products]);
 
+  // --- HISTORIAL COMPLETO DEL TURNO ---
   const historyGroups = useMemo(() => {
     const g = {};
-    movements.filter(m => m.movement_type === 'venta' && m.seller_name === user?.full_name)
+    movements.filter(m => m.movement_type === 'venta') // Quitamos filtro de seller_name
       .forEach(m => { 
         if (!g[m.sale_group]) g[m.sale_group] = { items: [], dbTime: m.created_at }; 
         g[m.sale_group].items.push(m); 
       });
     return Object.entries(g).sort(([,a],[,b]) => b.dbTime.localeCompare(a.dbTime));
-  }, [movements, user]);
+  }, [movements]);
 
   const total = useMemo(() => cart.reduce((s, c) => s + c.price * c.qty, 0), [cart]);
 
@@ -220,7 +223,6 @@ export default function POSScreen({ user, onLogout }) {
         const { data: d } = await supabase.from('products').select('stock').eq('id', item.id).single();
         await updateStock(item.id, Math.max(0, (d?.stock || item.stock) - item.qty)); 
       }
-      // No hace falta loadInitialData() manual aquí porque el realtime lo disparará
       setCart([]);
       Alert.alert('✓ Venta confirmada', fmt(total));
     } catch (error) {
@@ -333,3 +335,4 @@ const s = StyleSheet.create({
   mBtn: { flex: 1, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   mBtnText: { color: '#fff', fontWeight: '900', fontSize: 12 }
 });
+
