@@ -5,20 +5,17 @@ import {
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 
-// Iconos modernos
 import { 
   ShoppingCart, Settings, LogOut, PackageSearch, 
-  CheckCircle2, Trash2, UserPlus, X, LockKeyhole, AlertCircle 
+  LockKeyhole, AlertCircle 
 } from 'lucide-react-native';
 
-// Importación de Componentes Modulares
 import ScannerInput from '../components/ScannerInput';
 import CartItem from '../components/CartItem';
 import AuthModal from '../components/AuthModal';
 import HistorySection from '../components/HistorySection';
-import ScannerHibrido from '../components/ScannerHibrido';
+import ShiftCloseModal from '../components/ShiftCloseModal'; // NUEVO COMPONENTE
 
-// Libs y Pantallas
 import { getProducts, updateStock, insertMovements, supabase } from '../lib/supabase';
 import AdminScreen from './AdminScreen'; 
 
@@ -72,14 +69,14 @@ const VoidModal = ({ visible, onClose, data, user, onDone }) => {
           <AlertCircle color="#ef4444" size={40} />
           <Text style={s.modalTitle}>¿Anular venta?</Text>
           <Text style={s.modalSub}>Se devolverá el stock a los productos.</Text>
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 20 }}>
+          <div style={{ flexDirection: 'row', gap: 10, marginTop: 20 }}>
             <TouchableOpacity style={[s.mBtn, { backgroundColor: '#27272a' }]} onPress={onClose}>
               <Text style={s.mBtnText}>NO</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.mBtn, { backgroundColor: '#ef4444' }]} onPress={confirmVoid} disabled={loading}>
               {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.mBtnText}>SÍ, ANULAR</Text>}
             </TouchableOpacity>
-          </View>
+          </div>
         </View>
       </View>
     </Modal>
@@ -100,17 +97,19 @@ export default function POSScreen({ user, onLogout }) {
   const [authType, setAuthType] = useState('void'); 
   const [tempVoidData, setTempVoidData] = useState(null);
   const [voidModalOpen, setVoidModalOpen] = useState(false);
+  const [shiftModalOpen, setShiftModalOpen] = useState(false); // ESTADO PARA EL CIERRE
   
   const scannerInputRef = useRef(null);
 
-  // --- CARGA DE DATOS SIN FILTROS DE VENDEDOR ---
+  // --- CARGA DE DATOS FILTRADA POR USUARIO ---
   const loadInitialData = async () => {
     try {
       setLoading(true);
-      // Buscamos el último cierre de caja general (para que ambos vean el mismo turno)
+      // Buscamos el último cierre de ESTE vendedor específico
       const { data: lastClose } = await supabase.from('stock_movements')
         .select('created_at')
         .eq('movement_type', 'cierre_caja')
+        .eq('seller_name', user?.full_name)
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -121,6 +120,7 @@ export default function POSScreen({ user, onLogout }) {
         supabase.from('stock_movements')
           .select('*')
           .gt('created_at', startTime)
+          .eq('seller_name', user?.full_name) // <--- SOLO MIS VENTAS
           .order('created_at', { ascending: false })
       ]);
       setProducts(dbProducts || []);
@@ -132,52 +132,15 @@ export default function POSScreen({ user, onLogout }) {
     }
   };
 
-  // --- REALTIME: ESCUCHA TODO ---
   useEffect(() => {
-    let channel;
-    if (isFocused) {
-      loadInitialData();
-
-      channel = supabase
-        .channel('pos-global-sync')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'stock_movements' },
-          () => {
-            loadInitialData(); // Si alguien vende o anula, se refresca para ambos
-          }
-        )
-        .subscribe();
-    }
-
-    return () => {
-      if (channel) supabase.removeChannel(channel);
-    };
+    if (isFocused) loadInitialData();
   }, [isFocused]);
 
   const handleAuthSuccess = () => {
     if (authType === 'void' && tempVoidData) {
       setVoidModalOpen(true);
-    } else if (authType === 'close_shift') {
-      executeCloseShift();
     }
     setPinVisible(false);
-  };
-
-  const executeCloseShift = async () => {
-    try {
-      setLoading(true);
-      await supabase.from('stock_movements').insert([{
-        product_id: null, product_title: 'CIERRE DE CAJA', movement_type: 'cierre_caja', quantity: 0, price: 0, seller_name: user?.full_name, sale_group: new Date().toISOString()
-      }]);
-      Alert.alert('✓ Turno Finalizado', 'Historial reiniciado para todos.');
-      setCart([]);
-      loadInitialData(); 
-    } catch (e) {
-      Alert.alert('Error', 'No se pudo cerrar.');
-    } finally {
-      setLoading(false);
-    }
   };
 
   const results = useMemo(() => {
@@ -186,16 +149,16 @@ export default function POSScreen({ user, onLogout }) {
     return products.filter(p => (p.name || p.title)?.toLowerCase().includes(q) || p.barcode?.toLowerCase().includes(q)).slice(0, 5);
   }, [search, products]);
 
-  // --- HISTORIAL COMPLETO DEL TURNO ---
+  // --- HISTORIAL SOLO DEL USUARIO ACTUAL ---
   const historyGroups = useMemo(() => {
     const g = {};
-    movements.filter(m => m.movement_type === 'venta') // Quitamos filtro de seller_name
+    movements.filter(m => m.movement_type === 'venta' && m.seller_name === user?.full_name)
       .forEach(m => { 
         if (!g[m.sale_group]) g[m.sale_group] = { items: [], dbTime: m.created_at }; 
         g[m.sale_group].items.push(m); 
       });
     return Object.entries(g).sort(([,a],[,b]) => b.dbTime.localeCompare(a.dbTime));
-  }, [movements]);
+  }, [movements, user]);
 
   const total = useMemo(() => cart.reduce((s, c) => s + c.price * c.qty, 0), [cart]);
 
@@ -224,6 +187,7 @@ export default function POSScreen({ user, onLogout }) {
         await updateStock(item.id, Math.max(0, (d?.stock || item.stock) - item.qty)); 
       }
       setCart([]);
+      loadInitialData();
       Alert.alert('✓ Venta confirmada', fmt(total));
     } catch (error) {
       Alert.alert('Error', 'No se pudo guardar');
@@ -240,7 +204,15 @@ export default function POSScreen({ user, onLogout }) {
       <View style={s.topBar}>
         <TouchableOpacity onPress={onLogout} style={s.iconBtn}><LogOut color="#ef4444" size={20} /></TouchableOpacity>
         <View style={s.titleContainer}><Text style={s.headerTitle}>HMS <Text style={s.blue}>KIOSCO 24HS</Text></Text></View>
-        <TouchableOpacity onPress={() => { setAuthType('close_shift'); setPinVisible(true); }} style={[s.iconBtn, { marginRight: 8, borderColor: '#ef4444' }]}><LockKeyhole color="#ef4444" size={20} /></TouchableOpacity>
+        
+        {/* BOTÓN QUE ABRE EL NUEVO COMPONENTE DE CIERRE */}
+        <TouchableOpacity 
+            onPress={() => setShiftModalOpen(true)} 
+            style={[s.iconBtn, { marginRight: 8, borderColor: '#ef4444' }]}
+        >
+            <LockKeyhole color="#ef4444" size={20} />
+        </TouchableOpacity>
+
         <TouchableOpacity onPress={() => setView('admin')} style={s.iconBtn}><Settings color="#38bdf8" size={20} /></TouchableOpacity>
       </View>
 
@@ -300,8 +272,17 @@ export default function POSScreen({ user, onLogout }) {
         <View style={{ height: 100 }} />
       </ScrollView>
 
+      {/* MODALES MODULARIZADOS */}
       <VoidModal visible={voidModalOpen} onClose={() => setVoidModalOpen(false)} data={tempVoidData} user={user} onDone={loadInitialData} />
       <AuthModal visible={pinVisible} onClose={() => setPinVisible(false)} onSuccess={handleAuthSuccess} />
+      
+      <ShiftCloseModal 
+        visible={shiftModalOpen} 
+        onClose={() => setShiftModalOpen(false)} 
+        user={user} 
+        movements={movements} 
+        onLogout={onLogout} 
+      />
     </SafeAreaView>
   );
 }
