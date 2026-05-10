@@ -20,7 +20,8 @@ export default function CierreScreen({ user }) {
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
 
-  const isEncargado = user?.role === 'encargado';
+  // Verificamos si es encargado o admin
+  const isEncargado = user?.role === 'encargado' || user?.role === 'admin';
 
   const getTurnoStart = async () => {
     try {
@@ -45,38 +46,45 @@ export default function CierreScreen({ user }) {
       let dateS = start;
       let dateE = end || new Date(new Date().setHours(23, 59, 59, 999));
 
-      if (isTurno) {
+      // Si no es encargado, forzamos siempre la búsqueda por su turno
+      const forceTurno = !isEncargado || isTurno;
+
+      if (forceTurno) {
         const startTime = await getTurnoStart();
         setTurnoStartTime(startTime);
         dateS = new Date(startTime);
-        setRangeLabel('Turno Actual');
+        setRangeLabel(isEncargado ? 'Turno Actual' : 'Mi Turno Actual');
       } else if (!start) {
         dateS = new Date(new Date().setHours(0, 0, 0, 0));
       }
       
       const data = await getMovementsByRange(dateS, dateE);
-      setMovements(data || []);
+
+      // FILTRO DE PRIVACIDAD: El vendedor solo ve sus movimientos, el encargado ve todo
+      const filteredData = isEncargado 
+        ? data 
+        : data.filter(m => m.seller_name === user?.full_name);
+
+      setMovements(filteredData || []);
     } catch (error) {
       Alert.alert("Error", "No se pudieron obtener los movimientos.");
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, isEncargado]);
 
   useEffect(() => {
     fetchCierre(null, null, timeFilter === 'turno' || !isEncargado);
   }, [fetchCierre, isEncargado]);
 
-  // Lógica ON/OFF para los filtros
+  // Lógica ON/OFF para los filtros (Solo Encargados)
   const handleRangeChange = (start, end, type) => {
     if (!isEncargado) return;
 
-    // Si el filtro que toco ya es el que está activo, vuelvo al turno (OFF)
     if (type === timeFilter) {
       setTimeFilter('turno');
       fetchCierre(null, null, true);
     } else {
-      // Si es uno nuevo, lo activo (ON)
       setTimeFilter(type); 
       setRangeLabel({ day: 'Hoy', week: 'Semana', month: 'Mes', year: 'Año' }[type] || 'Personalizado');
       fetchCierre(start, end, false);
@@ -113,21 +121,14 @@ export default function CierreScreen({ user }) {
   const todasAnulaciones = movements.filter(m => m.movement_type === 'anulacion');
   const checkVoided = (sg) => todasAnulaciones.some(m => m.sale_group === sg);
 
-  const filteredMovements = useMemo(() => {
-    if (timeFilter === 'turno' || !isEncargado) {
-      return todasVentas.filter(m => m.seller_name === user?.full_name && m.created_at >= turnoStartTime);
-    }
-    return todasVentas;
-  }, [todasVentas, user, isEncargado, timeFilter, turnoStartTime]);
-
   const groups = useMemo(() => {
     const g = {};
-    filteredMovements.forEach(m => { 
+    todasVentas.forEach(m => { 
         if (!g[m.sale_group]) g[m.sale_group] = []; 
         g[m.sale_group].push(m); 
     });
     return Object.entries(g).sort(([a],[b]) => b.localeCompare(a));
-  }, [filteredMovements]);
+  }, [todasVentas]);
 
   const activeGroups = groups.filter(([sg]) => !checkVoided(sg));
   const voidedGroups = groups.filter(([sg]) => checkVoided(sg));
@@ -147,6 +148,7 @@ export default function CierreScreen({ user }) {
     <SafeAreaView style={s.safe}>
       <ScrollView style={s.scroll}>
         
+        {/* SOLO EL ENCARGADO VE LOS FILTROS DE TIEMPO Y CALENDARIO */}
         {isEncargado && (
           <View style={{ marginBottom: 12 }}>
             <HistoryNavigator 
@@ -185,7 +187,7 @@ export default function CierreScreen({ user }) {
           ].map(([l,v,c]) => (
             <View key={l} style={[s.kpi, { borderColor: c + '40' }]}>
               <Text style={[s.kpiVal, { color: c }]}>{v}</Text>
-              <Text style={s.kpiLabel}>{l} {(!isEncargado || timeFilter === 'turno') ? 'del turno' : ''}</Text>
+              <Text style={s.kpiLabel}>{l} {(!isEncargado || timeFilter === 'turno') ? (isEncargado ? 'del turno' : 'de tu turno') : ''}</Text>
             </View>
           ))}
         </View>
@@ -207,7 +209,10 @@ export default function CierreScreen({ user }) {
             return (
               <TouchableOpacity key={sg} style={[s.saleRow, vd && { opacity: 0.4 }]} onLongPress={() => !vd && isEncargado && handleAnular(sg)} disabled={!isEncargado || vd}>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.saleTime}>{new Date(sg).toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit'})} - {timeStr(sg)} {isEncargado ? `· ${items[0].seller_name}` : ''}</Text>
+                  <Text style={s.saleTime}>
+                    {new Date(sg).toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit'})} - {timeStr(sg)} 
+                    {isEncargado ? ` · ${items[0].seller_name}` : ''}
+                  </Text>
                   {items.map(m => (<Text key={m.id} style={s.saleItem}>{m.product_title} <Text style={{color: '#52525b'}}>x{Math.abs(m.quantity)}</Text></Text>))}
                 </View>
                 <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -223,15 +228,17 @@ export default function CierreScreen({ user }) {
           <Text style={s.ticketTitle}>HMS KIOSCO 24HS — {rangeLabel.toUpperCase()}</Text>
           <Text style={s.ticketSub}>{user?.full_name} · {new Date().toLocaleDateString('es-AR')}</Text>
           <Text style={s.ticketTotal}>{fmt(totalRevenue)}</Text>
+          
           <TouchableOpacity 
             style={[s.refreshBtn, timeFilter === 'turno' && {backgroundColor: PRIMARY_COLOR + '20', borderColor: PRIMARY_COLOR}]} 
             onPress={() => { setTimeFilter('turno'); fetchCierre(null, null, true); }}
           >
               <Text style={[s.refreshText, timeFilter === 'turno' && {color: PRIMARY_COLOR}]}>
-                {timeFilter === 'turno' ? 'TURNO ACTUAL ACTIVO' : 'VOLVER AL TURNO ACTUAL'}
+                {isEncargado ? (timeFilter === 'turno' ? 'TURNO ACTUAL ACTIVO' : 'VOLVER AL TURNO ACTUAL') : 'ACTUALIZAR MI TURNO'}
               </Text>
           </TouchableOpacity>
         </View>
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
